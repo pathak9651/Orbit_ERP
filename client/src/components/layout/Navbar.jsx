@@ -3,6 +3,7 @@ const userNavigation = [
   { icon: 'TK', label: 'My tasks', page: 'tasks' },
   { icon: 'AT', label: 'Attendance', page: 'attendance' },
   { icon: 'LV', label: 'Leave requests', page: 'leaves' },
+  { icon: 'EM', label: 'Email', page: 'email' },
   { icon: 'ME', label: 'Profile', page: 'profile' },
 ]
 
@@ -12,6 +13,7 @@ const adminNavigation = [
   { icon: 'TK', label: 'Task management', page: 'tasks' },
   { icon: 'AT', label: 'Attendance', page: 'attendance' },
   { icon: 'LV', label: 'Leave requests', page: 'leaves' },
+  { icon: 'EM', label: 'Email', page: 'email' },
   { icon: 'HK', label: 'Housekeeping', page: 'housekeeping' },
   { icon: 'BI', label: 'Bills and invoices', page: 'billing' },
   { icon: 'RV', label: 'Revenue', page: 'revenue' },

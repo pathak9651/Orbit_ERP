@@ -1,4 +1,6 @@
-export default function HorizontalNavbar({ user, onSignOut, signingOut }) {
+import NotificationBell from './NotificationBell.jsx'
+
+export default function HorizontalNavbar({ user, onSignOut, signingOut, notifications, unreadCount, onOpenNotification, onMarkAllNotificationsRead }) {
   return (
     <header className="horizontal-navbar">
       <a className="brand" href="#overview" aria-label="Orbit ERP home">
@@ -6,6 +8,7 @@ export default function HorizontalNavbar({ user, onSignOut, signingOut }) {
         <span>orbit<span className="brand-muted">ERP</span></span>
       </a>
       <div className="horizontal-navbar-account">
+        <NotificationBell notifications={notifications} unreadCount={unreadCount} onOpen={onOpenNotification} onMarkAll={onMarkAllNotificationsRead} />
         <span className="horizontal-user-name">{user.name}</span>
         <span className="avatar avatar-small" aria-hidden="true">{user.name?.[0]?.toUpperCase() || 'U'}</span>
         <button className="horizontal-signout" type="button" onClick={onSignOut} disabled={signingOut}>

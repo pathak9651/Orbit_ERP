@@ -1,4 +1,5 @@
 import User from '../models/user.js';
+import { notifyUsers } from '../services/notifications.js';
 import Role from '../models/role.js';
 import {
   clearAuthCookie,
@@ -46,6 +47,11 @@ export async function signUp(req, res, next) {
 
   try {
     const user = await User.create({ name, email, password: await hashPassword(password), isVerified: false });
+    const admins = await User.find({ role: 'admin', isVerified: { $ne: false } }).distinct('_id');
+    await notifyUsers(admins, {
+      type: 'account', title: 'Account approval needed', message: `${name} requested access to Orbit ERP.`,
+      page: 'users', entityId: String(user._id),
+    });
     return res.status(202).json({ message: 'Your account request has been sent to an administrator for approval.' });
   } catch (error) {
     if (error.code === 11000) {

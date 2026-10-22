@@ -14,12 +14,20 @@ import {
   signOut,
   signUp,
 } from '../controllers/authController.js';
+import { listEmailDirectory, listSentEmails, sendEmail } from '../controllers/emailController.js';
+import { listNotifications, markAllNotificationsRead, markNotificationRead } from '../controllers/notificationController.js';
 
 const router = express.Router();
 
 router.post('/signup', signUp);
 router.post('/login', signIn);
 router.get('/me', authenticateToken, getCurrentUser);
+router.get('/notifications', authenticateToken, listNotifications);
+router.patch('/notifications/read-all', authenticateToken, markAllNotificationsRead);
+router.patch('/notifications/:id/read', authenticateToken, markNotificationRead);
+router.get('/mail/directory', authenticateToken, listEmailDirectory);
+router.get('/mail/sent', authenticateToken, listSentEmails);
+router.post('/mail/send', authenticateToken, sendEmail);
 router.patch('/profile', authenticateToken, updateProfile);
 router.patch('/profile/password', authenticateToken, changePassword);
 router.post('/logout', signOut);

@@ -3,6 +3,23 @@ import Attendance from '../models/attendance.js'
 import User from '../models/user.js'
 import Role from '../models/role.js'
 import LeaveRequest from '../models/leaveRequest.js'
+import { notifyUsers } from '../services/notifications.js'
+async function notifyAttendanceEvent(user, action, dateKey) {
+  const actionLabel = action === 'check-in' ? 'checked in' : 'checked out'
+  await notifyUsers([user._id], {
+    type: 'attendance', title: 'Attendance recorded', message: `Your ${actionLabel} was recorded for ${dateKey}.`,
+    page: 'attendance',
+  })
+  const departmentId = user.department?._id || user.department
+  const [organizationLeads, departmentManagers] = await Promise.all([
+    User.find({ role: { $in: ['admin', 'hr'] }, isVerified: { $ne: false } }).distinct('_id'),
+    departmentId ? User.find({ role: 'manager', department: departmentId, isVerified: { $ne: false } }).distinct('_id') : [],
+  ])
+  await notifyUsers([...organizationLeads, ...departmentManagers], {
+    actorId: user._id, actorName: user.name, type: 'attendance', title: `${user.name} ${actionLabel}`,
+    message: `${user.name} ${actionLabel} on ${dateKey}.`, page: 'attendance',
+  })
+}
 
 const attendanceTimeZone = process.env.APP_TIME_ZONE || 'Asia/Kolkata'
 const todayKey = () => {
@@ -115,6 +132,7 @@ export async function checkIn(req, res, next) {
   try {
     const today = todayKey()
     const record = await Attendance.create({ user: req.user._id, dateKey: today, checkIn: new Date(), checkInLocation: { latitude, longitude, accuracyMeters: accuracyMeters ?? null } })
+    await notifyAttendanceEvent(req.user, 'check-in', today)
     return res.status(201).json({ today: record, message: 'You are checked in.' })
   } catch (error) {
     if (error.code === 11000) return res.status(409).json({ message: 'You have already checked in today.' })
@@ -137,7 +155,7 @@ export async function updateAttendanceLocation(req, res, next) {
     if (record.checkOut) return res.status(409).json({ message: 'Location can only be recorded before you check out.' })
     record.checkInLocation = { latitude, longitude, accuracyMeters: accuracyMeters ?? null }
     await record.save()
-    return res.json({ today: record, message: 'Your current location has been saved to today’s attendance record.' })
+    return res.json({ today: record, message: 'Your current location has been saved to todayâ€™s attendance record.' })
   } catch (error) { return next(error) }
 }
 export async function checkOut(req, res, next) {
@@ -148,14 +166,7 @@ export async function checkOut(req, res, next) {
     if (record.checkOut) return res.status(409).json({ message: 'You have already checked out today.' })
     record.checkOut = new Date()
     await record.save()
+    await notifyAttendanceEvent(req.user, 'check-out', record.dateKey)
     return res.json({ today: record, message: 'You are checked out.' })
   } catch (error) { return next(error) }
 }
-
-
-
-
-
-
-
-

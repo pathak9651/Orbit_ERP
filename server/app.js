@@ -8,8 +8,8 @@ import apiRoutes from './routes/api.js';
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 
-app.use(express.json({ limit: '10kb' }));
-app.use(express.urlencoded({ extended: false, limit: '10kb' }));
+app.use(express.json({ limit: '150kb' }));
+app.use(express.urlencoded({ extended: false, limit: '150kb' }));
 app.use(cookieParser());
 
 app.use('/api', apiRoutes);

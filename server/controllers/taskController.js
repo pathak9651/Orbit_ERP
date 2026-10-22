@@ -2,6 +2,7 @@ import mongoose from 'mongoose'
 import Role, { SYSTEM_ROLES } from '../models/role.js'
 import Task from '../models/task.js'
 import User from '../models/user.js'
+import { notifyUsers } from '../services/notifications.js'
 
 async function roleLevel(roleKey) {
   let role = await Role.findOne({ key: roleKey }).select('level').lean()
@@ -73,6 +74,10 @@ export async function createTask(req, res, next) {
       return res.status(403).json({ message: 'Managers can assign tasks only within their department.' })
     }
     const task = await Task.create({ title, description, assignedTo: assignee._id, assignedBy: req.user._id, department: assignee.department || null, dueDate: dueDate || null })
+    await notifyUsers([assignee._id], {
+      actorId: req.user._id, actorName: req.user.name, type: 'task', title: 'A task was assigned to you',
+      message: `${req.user.name} assigned “${task.title}” to you.`, page: 'tasks', entityId: String(task._id),
+    })
     const populated = await Task.findById(task._id).populate('assignedTo', 'name email role').populate('assignedBy', 'name email role').populate('department', 'name').lean()
     return res.status(201).json({ task: populated })
   } catch (error) { return next(error) }
@@ -88,8 +93,15 @@ export async function updateTaskStatus(req, res, next) {
     const isAssignee = String(task.assignedTo) === String(req.user._id)
     const isAssigner = String(task.assignedBy) === String(req.user._id)
     if (!isAssignee && !isAssigner && !['admin', 'hr'].includes(req.user.role)) return res.status(403).json({ message: 'You cannot update this task.' })
+    const previousStatus = task.status
     task.status = status
     await task.save()
+    if (previousStatus !== status) {
+      await notifyUsers([task.assignedTo, task.assignedBy], {
+        actorId: req.user._id, actorName: req.user.name, type: 'task', title: 'Task status updated',
+        message: `${req.user.name} changed “${task.title}” to ${status.replace('-', ' ')}.`, page: 'tasks', entityId: String(task._id),
+      })
+    }
     const populated = await Task.findById(task._id).populate('assignedTo', 'name email role').populate('assignedBy', 'name email role').populate('department', 'name').lean()
     return res.json({ task: populated })
   } catch (error) { return next(error) }

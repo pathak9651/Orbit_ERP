@@ -1,0 +1,32 @@
+import nodemailer from 'nodemailer'
+
+let transporter
+
+function getTransporter() {
+  const { SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASSWORD } = process.env
+  if (!SMTP_HOST || !SMTP_PORT || !SMTP_USER || !SMTP_PASSWORD) {
+    const error = new Error('Email is not configured. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, and SMTP_FROM in server/.env.')
+    error.status = 503
+    throw error
+  }
+  if (!transporter) {
+    transporter = nodemailer.createTransport({
+      host: SMTP_HOST,
+      port: Number(SMTP_PORT),
+      secure: SMTP_SECURE === 'true',
+      auth: { user: SMTP_USER, pass: SMTP_PASSWORD },
+    })
+  }
+  return transporter
+}
+
+export async function sendWorkspaceEmail({ recipients, subject, message }) {
+  const from = process.env.SMTP_FROM || process.env.SMTP_USER
+  return getTransporter().sendMail({
+    from,
+    to: from,
+    bcc: recipients.map(({ email }) => email),
+    subject,
+    text: message,
+  })
+}

@@ -19,6 +19,34 @@ export function getCurrentUser() {
   return request('/api/me')
 }
 
+export function getNotifications() {
+  return request('/api/notifications')
+}
+
+export function markNotificationRead(id) {
+  return request(`/api/notifications/${encodeURIComponent(id)}/read`, { method: 'PATCH' })
+}
+
+export function markAllNotificationsRead() {
+  return request('/api/notifications/read-all', { method: 'PATCH' })
+}
+
+export function getEmailDirectory() {
+  return request('/api/mail/directory')
+}
+
+export function getSentEmails() {
+  return request('/api/mail/sent')
+}
+
+export function sendWorkspaceEmail(details) {
+  return request('/api/mail/send', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(details),
+  })
+}
+
 export function signIn(credentials) {
   return request('/api/login', {
     method: 'POST',

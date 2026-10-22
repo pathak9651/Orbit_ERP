@@ -1,6 +1,7 @@
 import mongoose from 'mongoose'
 import LeaveRequest from '../models/leaveRequest.js'
 import User from '../models/user.js'
+import { notifyUsers } from '../services/notifications.js'
 
 const validDateKey = (value) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00.000Z`)) && new Date(`${value}T00:00:00.000Z`).toISOString().slice(0, 10) === value
 const populateLeave = (query) => query
@@ -58,6 +59,17 @@ export async function createLeaveRequest(req, res, next) {
       currentStage: stage,
       history: [{ actor: req.user._id, actorRole: req.user.role, action: 'submitted', message: `Submitted for ${stage} review.` }],
     })
+    await notifyUsers([req.user._id], {
+      type: 'leave', title: 'Leave request submitted', message: `Your ${leaveType} leave request for ${startDate} to ${endDate} is awaiting ${stage} review.`,
+      page: 'leaves', entityId: String(request._id),
+    })
+    const reviewerFilter = { role: stage, isVerified: { $ne: false } }
+    if (stage === 'manager') reviewerFilter.department = req.user.department?._id || req.user.department
+    const reviewers = await User.find(reviewerFilter).distinct('_id')
+    await notifyUsers(reviewers, {
+      actorId: req.user._id, actorName: req.user.name, type: 'leave', title: 'Leave request needs review',
+      message: `${req.user.name} submitted a ${leaveType} leave request for ${startDate} to ${endDate}.`, page: 'leaves', entityId: String(request._id),
+    })
     return res.status(201).json({ request: await populateLeave(LeaveRequest.findById(request._id)), message: `Leave request sent for ${stage} review.` })
   } catch (error) { return next(error) }
 }
@@ -95,6 +107,28 @@ export async function actOnLeaveRequest(req, res, next) {
       request.history.push({ actor: req.user._id, actorRole: req.user.role, action: action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : action, message })
     }
     await request.save()
+    if (action === 'forward') {
+      const stageName = request.currentStage === 'admin' ? 'administrator' : request.currentStage.toUpperCase()
+      await notifyUsers([request.requester], {
+        actorId: req.user._id, actorName: req.user.name, type: 'leave', title: 'Leave request forwarded',
+        message: `${req.user.name} forwarded your leave request to ${stageName}. ${message}`,
+        page: 'leaves', entityId: String(request._id),
+      })
+      const nextReviewerFilter = { role: request.currentStage, isVerified: { $ne: false } }
+      if (request.currentStage === 'manager') nextReviewerFilter.department = request.department
+      const nextReviewers = await User.find(nextReviewerFilter).distinct('_id')
+      await notifyUsers(nextReviewers, {
+        actorId: req.user._id, actorName: req.user.name, type: 'leave', title: 'Leave request needs review',
+        message: `${req.user.name} forwarded a leave request for ${request.startDate} to ${request.endDate}. ${message}`,
+        page: 'leaves', entityId: String(request._id),
+      })
+    } else {
+      await notifyUsers([request.requester], {
+        actorId: req.user._id, actorName: req.user.name, type: 'leave', title: `Leave request ${action === 'approve' ? 'approved' : 'rejected'}`,
+        message: `${req.user.name} ${action === 'approve' ? 'approved' : 'rejected'} your leave request.${message ? ` ${message}` : ''}`,
+        page: 'leaves', entityId: String(request._id),
+      })
+    }
     return res.json({ request: await populateLeave(LeaveRequest.findById(request._id)), message: action === 'forward' ? 'Leave request forwarded.' : action === 'approve' ? 'Leave request approved.' : 'Leave request rejected.' })
   } catch (error) { return next(error) }
 }

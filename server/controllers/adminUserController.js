@@ -2,6 +2,7 @@ import Department from '../models/department.js'
 import Role from '../models/role.js'
 import User from '../models/user.js'
 import { ensureSystemRoles } from './organizationController.js'
+import { notifyUsers } from '../services/notifications.js'
 
 function publicUser(user) {
   return {
@@ -58,6 +59,9 @@ export async function updateManagedUser(req, res, next) {
   try {
     const user = await User.findById(id)
     if (!user) return res.status(404).json({ message: 'User not found.' })
+    const wasVerified = user.isVerified !== false
+    const previousRole = user.role
+    const previousDepartment = String(user.department || '')
 
     if (role !== undefined && !(await Role.exists({ key: role }))) {
       return res.status(400).json({ message: 'Choose a valid ERP role.' })
@@ -78,6 +82,18 @@ export async function updateManagedUser(req, res, next) {
     if (departmentId !== undefined) user.department = department?._id || null
     await user.save()
     await user.populate('department', 'name')
+    const becameVerified = !wasVerified && user.isVerified !== false
+    const organizationAssignmentChanged = previousRole !== user.role || previousDepartment !== String(user.department?._id || '')
+    if (becameVerified || organizationAssignmentChanged) {
+      const role = await Role.findOne({ key: user.role }).select('name').lean()
+      const details = [role?.name || user.role, user.department?.name].filter(Boolean).join(' · ')
+      await notifyUsers([user._id], {
+        actorId: req.user._id, actorName: req.user.name, type: 'account',
+        title: becameVerified ? 'Your account has been verified' : 'Your organization details changed',
+        message: becameVerified ? `Your Orbit ERP access is approved. Your role and department: ${details}.` : `Your role and department are now: ${details}.`,
+        page: 'profile', entityId: String(user._id),
+      })
+    }
     return res.json({ user: publicUser(user) })
   } catch (error) {
     return next(error)

@@ -7,10 +7,11 @@ import OrganizationSettingsPage from './components/dashboard/OrganizationSetting
 import TaskPage from './components/dashboard/TaskPage.jsx'
 import AttendancePage from './components/dashboard/AttendancePage.jsx'
 import LeavePage from './components/dashboard/LeavePage.jsx'
+import EmailPage from './components/dashboard/EmailPage.jsx'
 import ProfilePage from './components/profile/ProfilePage.jsx'
 import Navbar from './components/layout/Navbar.jsx'
 import HorizontalNavbar from './components/layout/HorizontalNavbar.jsx'
-import { getCurrentUser, signIn, signOut, signUp } from './services/api.js'
+import { getCurrentUser, getNotifications, markAllNotificationsRead, markNotificationRead, signIn, signOut, signUp } from './services/api.js'
 
 export default function App() {
   const [authMode, setAuthMode] = useState('login')
@@ -21,6 +22,8 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSigningOut, setIsSigningOut] = useState(false)
+  const [notifications, setNotifications] = useState([])
+  const [unreadCount, setUnreadCount] = useState(0)
 
   useEffect(() => {
     let isMounted = true
@@ -42,10 +45,12 @@ export default function App() {
         const { user: refreshedUser } = await getCurrentUser()
         if (!isActive) return
         setUser(refreshedUser)
-        setCurrentPage((page) => refreshedUser.role !== 'admin' && !['overview', 'profile', 'tasks', 'attendance', 'leaves'].includes(page) ? 'overview' : page)
+        setCurrentPage((page) => refreshedUser.role !== 'admin' && !['overview', 'profile', 'tasks', 'attendance', 'leaves', 'email'].includes(page) ? 'overview' : page)
       } catch (error) {
         if (!isActive || (error.status !== 401 && error.status !== 403)) return
         setUser(null)
+        setNotifications([])
+        setUnreadCount(0)
         setCurrentPage('overview')
         setAuthMode('login')
         setAuthError(error.message)
@@ -58,6 +63,22 @@ export default function App() {
       window.clearInterval(timer)
     }
   }, [isAuthenticated, isSigningOut])
+
+  useEffect(() => {
+    if (!isAuthenticated || isSigningOut) return undefined
+    let isActive = true
+    async function refreshNotifications() {
+      try {
+        const result = await getNotifications()
+        if (!isActive) return
+        setNotifications(result.notifications)
+        setUnreadCount(result.unreadCount)
+      } catch { /* The notification feed retries on the next refresh. */ }
+    }
+    refreshNotifications()
+    const timer = window.setInterval(refreshNotifications, 5000)
+    return () => { isActive = false; window.clearInterval(timer) }
+  }, [isAuthenticated, isSigningOut])
   async function handleAuthSubmit(event) {
     event.preventDefault()
     setAuthError('')
@@ -69,6 +90,8 @@ export default function App() {
     try {
       if (authMode === 'login') {
         const result = await signIn(details)
+        setNotifications([])
+        setUnreadCount(0)
         setCurrentPage('overview')
         setUser(result.user)
       } else {
@@ -88,6 +111,8 @@ export default function App() {
     try {
       await signOut()
       setUser(null)
+      setNotifications([])
+      setUnreadCount(0)
       setCurrentPage('overview')
       setAuthMode('login')
     } catch (error) {
@@ -95,6 +120,25 @@ export default function App() {
     } finally {
       setIsSigningOut(false)
     }
+  }
+
+  async function handleNotificationOpen(notification) {
+    if (!notification.readAt) {
+      const readAt = new Date().toISOString()
+      setNotifications((current) => current.map((item) => item.id === notification.id ? { ...item, readAt } : item))
+      setUnreadCount((count) => Math.max(0, count - 1))
+      markNotificationRead(notification.id).catch(() => {})
+    }
+    setCurrentPage(notification.page || 'overview')
+    setAuthError('')
+  }
+
+  async function handleMarkAllNotificationsRead() {
+    if (!unreadCount) return
+    const readAt = new Date().toISOString()
+    setNotifications((current) => current.map((item) => item.readAt ? item : { ...item, readAt }))
+    setUnreadCount(0)
+    try { await markAllNotificationsRead() } catch { /* The next refresh restores the server state if needed. */ }
   }
 
   if (isLoading) {
@@ -116,7 +160,7 @@ export default function App() {
 
   return (
     <div className="workspace-layout">
-      <HorizontalNavbar user={user} onSignOut={handleSignOut} signingOut={isSigningOut} />
+      <HorizontalNavbar user={user} onSignOut={handleSignOut} signingOut={isSigningOut} notifications={notifications} unreadCount={unreadCount} onOpenNotification={handleNotificationOpen} onMarkAllNotificationsRead={handleMarkAllNotificationsRead} />
       <div className="workspace-shell">
         <Navbar
           user={user}
@@ -129,6 +173,8 @@ export default function App() {
             ? <AttendancePage user={user} />
           : currentPage === 'leaves'
             ? <LeavePage user={user} />
+          : currentPage === 'email'
+            ? <EmailPage user={user} />
           : currentPage === 'profile'
           ? <ProfilePage user={user} onUserUpdated={setUser} notice={authError} />
           : user.role === 'admin' && currentPage === 'users'
