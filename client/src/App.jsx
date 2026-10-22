@@ -8,9 +8,11 @@ import TaskPage from './components/dashboard/TaskPage.jsx'
 import AttendancePage from './components/dashboard/AttendancePage.jsx'
 import LeavePage from './components/dashboard/LeavePage.jsx'
 import EmailPage from './components/dashboard/EmailPage.jsx'
+import BillingPage from './components/dashboard/BillingPage.jsx'
 import ProfilePage from './components/profile/ProfilePage.jsx'
 import Navbar from './components/layout/Navbar.jsx'
 import HorizontalNavbar from './components/layout/HorizontalNavbar.jsx'
+import { canAccessBilling } from './services/permissions.js'
 import { getCurrentUser, getNotifications, markAllNotificationsRead, markNotificationRead, signIn, signOut, signUp } from './services/api.js'
 
 export default function App() {
@@ -45,7 +47,7 @@ export default function App() {
         const { user: refreshedUser } = await getCurrentUser()
         if (!isActive) return
         setUser(refreshedUser)
-        setCurrentPage((page) => refreshedUser.role !== 'admin' && !['overview', 'profile', 'tasks', 'attendance', 'leaves', 'email'].includes(page) ? 'overview' : page)
+        setCurrentPage((page) => refreshedUser.role !== 'admin' && !['overview', 'profile', 'tasks', 'attendance', 'leaves', 'email'].includes(page) && !(page === 'billing' && canAccessBilling(refreshedUser)) ? 'overview' : page)
       } catch (error) {
         if (!isActive || (error.status !== 401 && error.status !== 403)) return
         setUser(null)
@@ -175,6 +177,8 @@ export default function App() {
             ? <LeavePage user={user} />
           : currentPage === 'email'
             ? <EmailPage user={user} />
+          : currentPage === 'billing' && canAccessBilling(user)
+            ? <BillingPage user={user} />
           : currentPage === 'profile'
           ? <ProfilePage user={user} onUserUpdated={setUser} notice={authError} />
           : user.role === 'admin' && currentPage === 'users'

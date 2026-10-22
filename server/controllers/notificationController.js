@@ -22,7 +22,7 @@ export async function markNotificationRead(req, res, next) {
     const notification = await Notification.findOneAndUpdate(
       { _id: req.params.id, recipient: req.user._id, readAt: null },
       { $set: { readAt: new Date() } },
-      { new: true },
+      { returnDocument: 'after' },
     )
     if (!notification) {
       const exists = await Notification.exists({ _id: req.params.id, recipient: req.user._id })

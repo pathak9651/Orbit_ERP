@@ -39,6 +39,38 @@ export function getSentEmails() {
   return request('/api/mail/sent')
 }
 
+export function getInvoices() {
+  return request('/api/billing/invoices')
+}
+
+export function createInvoice(details) {
+  return request('/api/billing/invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(details) })
+}
+
+export function updateInvoiceStatus(id, status) {
+  return request(`/api/billing/invoices/${encodeURIComponent(id)}/status`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) })
+}
+
+export async function downloadInvoicePdf(id, invoiceNumber) {
+  const response = await fetch(`/api/billing/invoices/${encodeURIComponent(id)}/pdf`, { credentials: 'include' })
+  if (!response.ok) {
+    const result = await response.json().catch(() => ({}))
+    throw new Error(result.message || 'Could not download the invoice PDF.')
+  }
+  const url = URL.createObjectURL(await response.blob())
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `${invoiceNumber || 'invoice'}.pdf`
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+export function emailInvoice(id) {
+  return request(`/api/billing/invoices/${encodeURIComponent(id)}/email`, { method: 'POST' })
+}
+
 export function sendWorkspaceEmail(details) {
   return request('/api/mail/send', {
     method: 'POST',

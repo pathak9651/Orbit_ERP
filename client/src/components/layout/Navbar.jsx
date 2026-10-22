@@ -1,3 +1,5 @@
+import { canAccessBilling } from '../../services/permissions.js'
+
 const userNavigation = [
   { icon: 'HM', label: 'Home', page: 'overview' },
   { icon: 'TK', label: 'My tasks', page: 'tasks' },
@@ -23,7 +25,9 @@ const adminNavigation = [
 ]
 
 export default function Navbar({ user, currentPage, onNavigate }) {
-  const navigation = user.role === 'admin' ? adminNavigation : userNavigation
+  const navigation = user.role === 'admin'
+    ? adminNavigation
+    : [...userNavigation, ...(canAccessBilling(user) ? [{ icon: 'BI', label: 'Bills and invoices', page: 'billing' }] : [])]
 
   return (
     <aside className="sidebar" aria-label="Workspace navigation">
@@ -60,6 +64,3 @@ export default function Navbar({ user, currentPage, onNavigate }) {
     </aside>
   )
 }
-
-
-

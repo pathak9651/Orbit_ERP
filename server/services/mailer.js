@@ -30,3 +30,14 @@ export async function sendWorkspaceEmail({ recipients, subject, message }) {
     text: message,
   })
 }
+
+export async function sendInvoiceEmail({ recipient, invoiceNumber, pdfBuffer }) {
+  const from = process.env.SMTP_FROM || process.env.SMTP_USER
+  return getTransporter().sendMail({
+    from,
+    to: recipient,
+    subject: `Invoice ${invoiceNumber} from ${process.env.ORGANIZATION_NAME || 'Orbit ERP'}`,
+    text: `Hello,\n\nPlease find invoice ${invoiceNumber} attached as a PDF.\n\nRegards,\n${process.env.ORGANIZATION_NAME || 'Orbit ERP'}`,
+    attachments: [{ filename: `${invoiceNumber}.pdf`, content: pdfBuffer, contentType: 'application/pdf' }],
+  })
+}

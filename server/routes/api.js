@@ -16,6 +16,8 @@ import {
 } from '../controllers/authController.js';
 import { listEmailDirectory, listSentEmails, sendEmail } from '../controllers/emailController.js';
 import { listNotifications, markAllNotificationsRead, markNotificationRead } from '../controllers/notificationController.js';
+import { createInvoice, downloadInvoice, emailInvoice, listInvoices, updateInvoiceStatus } from '../controllers/billingController.js';
+import { authorizeBillingAccess } from '../middlewares/billingAccess.js';
 
 const router = express.Router();
 
@@ -28,6 +30,11 @@ router.patch('/notifications/:id/read', authenticateToken, markNotificationRead)
 router.get('/mail/directory', authenticateToken, listEmailDirectory);
 router.get('/mail/sent', authenticateToken, listSentEmails);
 router.post('/mail/send', authenticateToken, sendEmail);
+router.get('/billing/invoices', authenticateToken, authorizeBillingAccess, listInvoices);
+router.post('/billing/invoices', authenticateToken, authorizeBillingAccess, createInvoice);
+router.get('/billing/invoices/:id/pdf', authenticateToken, authorizeBillingAccess, downloadInvoice);
+router.post('/billing/invoices/:id/email', authenticateToken, authorizeBillingAccess, emailInvoice);
+router.patch('/billing/invoices/:id/status', authenticateToken, authorizeBillingAccess, updateInvoiceStatus);
 router.patch('/profile', authenticateToken, updateProfile);
 router.patch('/profile/password', authenticateToken, changePassword);
 router.post('/logout', signOut);
