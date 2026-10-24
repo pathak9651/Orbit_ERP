@@ -1,3 +1,4 @@
+/* Anchors the notification menu and unread indicator within the shared top bar. */
 .notification-center { position: relative; }
 .notification-bell { position: relative; display: grid; width: 36px; height: 36px; place-items: center; border: 1px solid var(--color-border); border-radius: 9px; background: var(--color-surface); color: var(--color-text-muted); cursor: pointer; }
 .notification-bell:hover, .notification-bell[aria-expanded="true"] { border-color: #47655b; color: var(--color-accent); }

@@ -1,3 +1,4 @@
+/* Page-specific layout for the staff directory, message composer, and sent history. */
 .email-page { display: grid; align-content: start; gap: 18px; }
 .email-page-heading { align-items: center; }
 .email-sender-badge { display: flex; align-items: center; gap: 9px; color: var(--color-text-subtle); font-size: 9px; }

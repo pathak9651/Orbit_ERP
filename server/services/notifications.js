@@ -1,5 +1,6 @@
 import Notification from '../models/notification.js'
 
+/** Creates in-app notifications for unique recipients while excluding the actor. */
 export async function notifyUsers(userIds, { actorId = null, actorName = '', type = 'system', title, message, page = 'overview', entityId = '' }) {
   const recipients = [...new Set((userIds || []).filter(Boolean).map(String))]
     .filter((id) => !actorId || id !== String(actorId))

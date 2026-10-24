@@ -2,6 +2,7 @@ import Department from '../models/department.js'
 import Role, { SYSTEM_ROLES } from '../models/role.js'
 import User from '../models/user.js'
 
+// Convert display names into stable URL/database keys for role and department records.
 const normalizeKey = (name) => name
   .normalize('NFKD')
   .replace(/[\u0300-\u036f]/g, '')
@@ -10,10 +11,12 @@ const normalizeKey = (name) => name
   .replace(/[^a-z0-9]+/g, '-')
   .replace(/^-|-$/g, '')
 
+/** Checks route IDs before attempting role or department lookups. */
 function isValidObjectId(value) {
   return typeof value === 'string' && /^[a-f\d]{24}$/i.test(value)
 }
 
+/** Trims and validates organization names in one place for consistent feedback. */
 function validateName(value, maxLength, label) {
   if (typeof value !== 'string') return `${label} is required.`
   const name = value.trim()
@@ -22,6 +25,7 @@ function validateName(value, maxLength, label) {
   return null
 }
 
+/** Inserts or refreshes the built-in roles while preserving custom organization roles. */
 export async function ensureSystemRoles() {
   await Role.bulkWrite(SYSTEM_ROLES.map((role) => ({
     updateOne: {
@@ -32,6 +36,7 @@ export async function ensureSystemRoles() {
   })))
 }
 
+/** Returns role and department choices used by administrator settings and assignment forms. */
 export async function listOrganizationSettings(req, res, next) {
   try {
     await ensureSystemRoles()
@@ -45,6 +50,7 @@ export async function listOrganizationSettings(req, res, next) {
   }
 }
 
+/** Creates a custom role with a hierarchy level below administrator authority. */
 export async function createRole(req, res, next) {
   const errorMessage = validateName(req.body?.name, 40, 'Role name')
   if (errorMessage) return res.status(400).json({ message: errorMessage })
@@ -61,6 +67,7 @@ export async function createRole(req, res, next) {
   }
 }
 
+/** Deletes an unused custom role without allowing removal of system roles. */
 export async function deleteRole(req, res, next) {
   if (!isValidObjectId(req.params.id)) return res.status(400).json({ message: 'Invalid role ID.' })
   try {
@@ -79,6 +86,7 @@ export async function deleteRole(req, res, next) {
   }
 }
 
+/** Creates a department after validating its display name and uniqueness. */
 export async function createDepartment(req, res, next) {
   const errorMessage = validateName(req.body?.name, 60, 'Department name')
   if (errorMessage) return res.status(400).json({ message: errorMessage })
@@ -95,6 +103,7 @@ export async function createDepartment(req, res, next) {
   }
 }
 
+/** Removes a department only when it is not assigned to any account. */
 export async function deleteDepartment(req, res, next) {
   if (!isValidObjectId(req.params.id)) return res.status(400).json({ message: 'Invalid department ID.' })
   try {

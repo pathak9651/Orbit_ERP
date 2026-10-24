@@ -1,5 +1,6 @@
 import Footer from '../layout/Footer.jsx'
 
+// Human-readable labels and descriptions for administrator-only ERP modules.
 const sections = {
   users: {
     title: 'User management',
@@ -38,6 +39,7 @@ const sections = {
   },
 }
 
+/** Shows the placeholder landing content for an administrator module. */
 export default function AdminModulePage({ section }) {
   const details = sections[section]
   if (!details) return null

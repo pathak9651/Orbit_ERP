@@ -3,8 +3,10 @@ import User from '../models/user.js'
 import { sendWorkspaceEmail } from '../services/mailer.js'
 import { notifyUsers } from '../services/notifications.js'
 
+// Bound each group message to keep delivery time and mail-provider load predictable.
 const EMAIL_LIMIT = 200
 
+/** Lists verified staff members that the current user is allowed to email. */
 export async function listEmailDirectory(req, res, next) {
   try {
     const users = await User.find({ isVerified: { $ne: false } })
@@ -19,6 +21,7 @@ export async function listEmailDirectory(req, res, next) {
   } catch (error) { return next(error) }
 }
 
+/** Sends a message to selected workspace members and records delivery status. */
 export async function sendEmail(req, res, next) {
   const subject = typeof req.body?.subject === 'string' ? req.body.subject.trim() : ''
   const message = typeof req.body?.message === 'string' ? req.body.message.trim() : ''
@@ -67,6 +70,7 @@ export async function sendEmail(req, res, next) {
   } catch (error) { return next(error) }
 }
 
+/** Returns the signed-in user's recent sent-message history. */
 export async function listSentEmails(req, res, next) {
   try {
     const filter = req.user.role === 'admin' ? {} : { sender: req.user._id }

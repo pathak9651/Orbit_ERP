@@ -1,3 +1,4 @@
+/** Presents the shared sign-in and account-request form. */
 export default function AuthScreen({ mode, onModeChange, onSubmit, error, notice, busy }) {
   const isSignUp = mode === 'signup'
 

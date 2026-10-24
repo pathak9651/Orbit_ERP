@@ -1,5 +1,6 @@
 import mongoose from 'mongoose'
 
+// Stores per-recipient activity so each user can independently read or clear notifications.
 const notificationSchema = new mongoose.Schema({
   recipient: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   actor: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },

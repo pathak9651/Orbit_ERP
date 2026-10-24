@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react'
 import Footer from '../layout/Footer.jsx'
 import { getAdminUsers, updateAdminUser } from '../../services/api.js'
 
+/** Formats account creation dates for the administrator's user list. */
 function formatDate(value) {
   if (!value) return 'Unknown'
   return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(value))
 }
 
+/** Allows administrators to verify accounts and assign roles and departments. */
 export default function UserManagementPage({ currentUserId }) {
   const [users, setUsers] = useState([])
   const [roles, setRoles] = useState([])

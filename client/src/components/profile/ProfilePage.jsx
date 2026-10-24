@@ -2,16 +2,19 @@ import { useState } from 'react'
 import Footer from '../layout/Footer.jsx'
 import { updatePassword, updateProfile } from '../../services/api.js'
 
+/** Formats profile timestamps consistently with the browser's locale. */
 function formatDate(value) {
   if (!value) return 'Not available'
   return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(value))
 }
 
+/** Shows the result of a profile save or password change accessibly. */
 function SaveMessage({ state }) {
   if (!state) return null
   return <p className={`form-message ${state.type}`} role={state.type === 'error' ? 'alert' : 'status'}>{state.text}</p>
 }
 
+/** Lets a signed-in user review account details and manage their credentials. */
 export default function ProfilePage({ user, onUserUpdated, notice }) {
   const [profileBusy, setProfileBusy] = useState(false)
   const [passwordBusy, setPasswordBusy] = useState(false)

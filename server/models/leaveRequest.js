@@ -1,5 +1,6 @@
 import mongoose from 'mongoose'
 
+// Each review action is retained so a request has an auditable approval trail.
 const leaveHistorySchema = new mongoose.Schema({
   actor: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   actorRole: { type: String, required: true },
@@ -8,6 +9,7 @@ const leaveHistorySchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
 }, { _id: false })
 
+// The current stage routes a pending request upward through manager, HR, and admin.
 const leaveRequestSchema = new mongoose.Schema({
   requester: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   department: { type: mongoose.Schema.Types.ObjectId, ref: 'Department', default: null, index: true },

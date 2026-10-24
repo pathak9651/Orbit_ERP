@@ -19,8 +19,10 @@ import { listNotifications, markAllNotificationsRead, markNotificationRead } fro
 import { createInvoice, downloadInvoice, emailInvoice, listInvoices, updateInvoiceStatus } from '../controllers/billingController.js';
 import { authorizeBillingAccess } from '../middlewares/billingAccess.js';
 
+// Keep endpoint declarations in one place; middleware order defines the access policy.
 const router = express.Router();
 
+// Public routes establish or clear sessions; protected routes authenticate before authorization.
 router.post('/signup', signUp);
 router.post('/login', signIn);
 router.get('/me', authenticateToken, getCurrentUser);

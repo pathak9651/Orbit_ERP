@@ -1,5 +1,6 @@
 import NotificationBell from './NotificationBell.jsx'
 
+/** Renders the persistent top bar with identity, notifications, and sign-out. */
 export default function HorizontalNavbar({ user, onSignOut, signingOut, notifications, unreadCount, onOpenNotification, onMarkAllNotificationsRead }) {
   return (
     <header className="horizontal-navbar">

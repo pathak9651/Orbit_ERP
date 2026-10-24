@@ -1,3 +1,4 @@
+/** Provides a reusable page heading with the current user and section name. */
 export default function Header({ user, currentPage = 'Overview' }) {
   return (
     <header className="topbar">

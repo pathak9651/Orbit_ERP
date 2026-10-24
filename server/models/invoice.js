@@ -1,5 +1,6 @@
 import mongoose from 'mongoose'
 
+// Embedded line items keep the invoice calculation and its printed details together.
 const invoiceItemSchema = new mongoose.Schema({
   description: { type: String, required: true, trim: true, maxlength: 160 },
   quantity: { type: Number, required: true, min: 0.01, max: 100000 },
@@ -7,6 +8,7 @@ const invoiceItemSchema = new mongoose.Schema({
   lineTotal: { type: Number, required: true, min: 0 },
 }, { _id: false })
 
+// Stores customer-facing invoice data, delivery state, and a history of status changes.
 const invoiceSchema = new mongoose.Schema({
   invoiceNumber: { type: String, required: true, unique: true, index: true },
   customerName: { type: String, required: true, trim: true, maxlength: 120 },

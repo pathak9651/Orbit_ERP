@@ -2,14 +2,17 @@ import { useEffect, useMemo, useState } from 'react'
 import { getEmailDirectory, getSentEmails, sendWorkspaceEmail } from '../../services/api.js'
 import './EmailPage.css'
 
+/** Converts an internal role key into a readable directory label. */
 function displayRole(role) {
   return role.replaceAll('-', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
 
+/** Displays a sent-email timestamp using the visitor's local date and time format. */
 function formatDate(value) {
   return value ? new Date(value).toLocaleString() : 'Date unavailable'
 }
 
+/** Provides the role-aware staff directory and one-to-one or group email form. */
 export default function EmailPage({ user }) {
   const [directory, setDirectory] = useState([])
   const [history, setHistory] = useState([])

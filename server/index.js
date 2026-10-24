@@ -4,6 +4,7 @@ import { connectDB } from './configs/db.js';
 
 const PORT = Number(process.env.PORT) || 8000;
 
+/** Validates required configuration, connects MongoDB, then starts the HTTP server. */
 async function startServer() {
   if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
     throw new Error('Set JWT_SECRET in server/.env to a random value of at least 32 characters.');

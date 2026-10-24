@@ -1,3 +1,4 @@
+/** Central API client: sends cookie-authenticated requests and reports server errors consistently. */
 async function request(path, options = {}) {
   const response = await fetch(path, {
     credentials: 'include',
@@ -15,22 +16,27 @@ async function request(path, options = {}) {
   return result
 }
 
+/** Loads the signed-in user from the HTTP-only session cookie. */
 export function getCurrentUser() {
   return request('/api/me')
 }
 
+/** Loads the current user's notification feed and unread count. */
 export function getNotifications() {
   return request('/api/notifications')
 }
 
+/** Marks one notification as read through the authenticated API. */
 export function markNotificationRead(id) {
   return request(`/api/notifications/${encodeURIComponent(id)}/read`, { method: 'PATCH' })
 }
 
+/** Marks the current user's full notification feed as read. */
 export function markAllNotificationsRead() {
   return request('/api/notifications/read-all', { method: 'PATCH' })
 }
 
+/** Fetches verified people available in the workspace email directory. */
 export function getEmailDirectory() {
   return request('/api/mail/directory')
 }
@@ -39,6 +45,7 @@ export function getSentEmails() {
   return request('/api/mail/sent')
 }
 
+/** Fetches invoices the current account is allowed to manage. */
 export function getInvoices() {
   return request('/api/billing/invoices')
 }
@@ -79,6 +86,7 @@ export function sendWorkspaceEmail(details) {
   })
 }
 
+/** Starts a session using the server's HTTP-only authentication cookie. */
 export function signIn(credentials) {
   return request('/api/login', {
     method: 'POST',
@@ -87,6 +95,7 @@ export function signIn(credentials) {
   })
 }
 
+/** Submits a registration request for administrator verification. */
 export function signUp(details) {
   return request('/api/signup', {
     method: 'POST',
@@ -95,6 +104,7 @@ export function signUp(details) {
   })
 }
 
+/** Ends the server session and clears its authentication cookie. */
 export function signOut() {
   return request('/api/logout', { method: 'POST' })
 }

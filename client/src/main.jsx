@@ -1,3 +1,4 @@
+// Mount the React application once and load the single shared stylesheet for every route.
 import React from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App.jsx'

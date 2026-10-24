@@ -2,6 +2,7 @@ import nodemailer from 'nodemailer'
 
 let transporter
 
+/** Creates and caches the SMTP transport from server environment settings. */
 function getTransporter() {
   const { SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASSWORD } = process.env
   if (!SMTP_HOST || !SMTP_PORT || !SMTP_USER || !SMTP_PASSWORD) {
@@ -20,6 +21,7 @@ function getTransporter() {
   return transporter
 }
 
+/** Sends a workspace message to the requested recipient email addresses. */
 export async function sendWorkspaceEmail({ recipients, subject, message }) {
   const from = process.env.SMTP_FROM || process.env.SMTP_USER
   return getTransporter().sendMail({
@@ -31,6 +33,7 @@ export async function sendWorkspaceEmail({ recipients, subject, message }) {
   })
 }
 
+/** Sends a customer invoice with its generated PDF attached. */
 export async function sendInvoiceEmail({ recipient, invoiceNumber, pdfBuffer }) {
   const from = process.env.SMTP_FROM || process.env.SMTP_USER
   return getTransporter().sendMail({

@@ -1,5 +1,6 @@
 import PDFDocument from 'pdfkit'
 
+/** Collects optional company contact and tax details for the invoice heading. */
 function companyInfo() {
   return [
     process.env.ORGANIZATION_ADDRESS,
@@ -10,11 +11,13 @@ function companyInfo() {
   ].filter(Boolean)
 }
 
+/** Draws the compact Orbit mark used on each invoice page. */
 function drawLogo(doc, x = 48, y = 38) {
   doc.roundedRect(x, y, 42, 42, 9).fill('#83dfbd')
   doc.fillColor('#0c1814').font('Helvetica-Bold').fontSize(26).text('o', x + 11, y + 5, { width: 24, align: 'center' })
 }
 
+/** Draws consistent item-column labels and returns the first row position. */
 function drawTableHeader(doc, y) {
   doc.save().roundedRect(48, y, 499, 25, 5).fill('#edf5f1').restore()
   doc.fillColor('#34443d').font('Helvetica-Bold').fontSize(8)
@@ -25,20 +28,24 @@ function drawTableHeader(doc, y) {
   return y + 25
 }
 
+/** Formats invoice amounts as Indian rupees with two decimal places. */
 function formatMoney(value) {
   return `INR ${Number(value || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
+/** Formats invoice dates in a stable UTC calendar timezone. */
 function formatInvoiceDate(value) {
   return new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(value))
 }
 
+/** Adds a visual system-generated mark to make the PDF's origin clear. */
 function drawDigitalStamp(doc, x, y) {
   doc.save().lineWidth(1.2).strokeColor('#258568').roundedRect(x, y, 112, 42, 6).stroke().restore()
   doc.fillColor('#258568').font('Helvetica-Bold').fontSize(8).text('ORBIT ERP', x + 7, y + 8, { width: 98, align: 'center' })
   doc.font('Helvetica').fontSize(7).text('SYSTEM GENERATED', x + 7, y + 21, { width: 98, align: 'center' })
 }
 
+/** Renders a paginated customer invoice into a PDF buffer for download or email. */
 export function createInvoicePdf(invoice) {
   return new Promise((resolve, reject) => {
     const chunks = []

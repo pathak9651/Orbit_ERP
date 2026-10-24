@@ -8,6 +8,7 @@ import {
   getAdminOrganization,
 } from '../../services/api.js'
 
+/** Lets administrators maintain the ERP role and department lists. */
 export default function OrganizationSettingsPage() {
   const [roles, setRoles] = useState([])
   const [departments, setDepartments] = useState([])

@@ -1,6 +1,7 @@
 import mongoose from 'mongoose'
 import Notification from '../models/notification.js'
 
+/** Returns a user's recent notifications and unread count for the navigation bell. */
 export async function listNotifications(req, res, next) {
   try {
     const recipient = req.user._id
@@ -16,6 +17,7 @@ export async function listNotifications(req, res, next) {
   } catch (error) { return next(error) }
 }
 
+/** Marks one notification read only when it belongs to the signed-in user. */
 export async function markNotificationRead(req, res, next) {
   if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ message: 'Invalid notification ID.' })
   try {
@@ -32,6 +34,7 @@ export async function markNotificationRead(req, res, next) {
   } catch (error) { return next(error) }
 }
 
+/** Marks every unread notification for the current user as read. */
 export async function markAllNotificationsRead(req, res, next) {
   try {
     await Notification.updateMany({ recipient: req.user._id, readAt: null }, { $set: { readAt: new Date() } })

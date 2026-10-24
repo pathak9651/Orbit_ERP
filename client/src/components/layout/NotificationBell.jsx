@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import './NotificationBell.css'
 
+/** Turns a notification timestamp into a short, readable relative time. */
 function timeAgo(value) {
   const elapsed = Math.max(0, Date.now() - new Date(value).getTime())
   const minutes = Math.floor(elapsed / 60000)
@@ -11,6 +12,7 @@ function timeAgo(value) {
   return new Date(value).toLocaleDateString()
 }
 
+/** Displays the notification menu and highlights unread activity. */
 export default function NotificationBell({ notifications, unreadCount, onOpen, onMarkAll }) {
   const [isOpen, setIsOpen] = useState(false)
 

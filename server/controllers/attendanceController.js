@@ -4,6 +4,7 @@ import User from '../models/user.js'
 import Role from '../models/role.js'
 import LeaveRequest from '../models/leaveRequest.js'
 import { notifyUsers } from '../services/notifications.js'
+/** Notifies the employee and relevant organization leads after a check-in/out event. */
 async function notifyAttendanceEvent(user, action, dateKey) {
   const actionLabel = action === 'check-in' ? 'checked in' : 'checked out'
   await notifyUsers([user._id], {
@@ -21,7 +22,9 @@ async function notifyAttendanceEvent(user, action, dateKey) {
   })
 }
 
+// A configurable business timezone keeps an attendance day aligned with the workplace.
 const attendanceTimeZone = process.env.APP_TIME_ZONE || 'Asia/Kolkata'
+/** Returns today's date key in the configured workplace timezone. */
 const todayKey = () => {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: attendanceTimeZone,
@@ -33,6 +36,7 @@ const todayKey = () => {
   return `${values.year}-${values.month}-${values.day}`
 }
 
+/** Returns today's attendance and the records visible to the signed-in role. */
 export async function getAttendance(req, res, next) {
   try {
     const dateKey = todayKey()
@@ -53,8 +57,10 @@ export async function getAttendance(req, res, next) {
 }
 
 
+/** Derives the current YYYY-MM reporting month from the workplace date. */
 const currentMonthKey = () => todayKey().slice(0, 7)
 
+/** Builds an admin-only month report with user roles, departments, and present/absent days. */
 export async function getAdminMonthlyAttendance(req, res, next) {
   const month = typeof req.query.month === 'string' ? req.query.month : currentMonthKey()
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
@@ -121,6 +127,7 @@ export async function getAdminMonthlyAttendance(req, res, next) {
     return res.json({ month, timeZone: attendanceTimeZone, days, users: attendanceUsers })
   } catch (error) { return next(error) }
 }
+/** Records one check-in per local business day, including optional GPS coordinates. */
 export async function checkIn(req, res, next) {
   const { latitude, longitude, accuracyMeters } = req.body?.location || {}
   if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 || !Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
@@ -141,6 +148,7 @@ export async function checkIn(req, res, next) {
 }
 
 
+/** Adds or refreshes GPS coordinates for an existing same-day attendance record. */
 export async function updateAttendanceLocation(req, res, next) {
   const { latitude, longitude, accuracyMeters } = req.body?.location || {}
   if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 || !Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
@@ -158,6 +166,7 @@ export async function updateAttendanceLocation(req, res, next) {
     return res.json({ today: record, message: 'Your current location has been saved to today’s attendance record.' })
   } catch (error) { return next(error) }
 }
+/** Records the employee's checkout time and announces the attendance update. */
 export async function checkOut(req, res, next) {
   if (!mongoose.isValidObjectId(req.user._id)) return res.status(400).json({ message: 'Invalid account.' })
   try {

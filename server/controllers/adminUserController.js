@@ -4,6 +4,7 @@ import User from '../models/user.js'
 import { ensureSystemRoles } from './organizationController.js'
 import { notifyUsers } from '../services/notifications.js'
 
+/** Builds the safe user fields returned to administrator screens. */
 function publicUser(user) {
   return {
     id: user.id,
@@ -18,10 +19,12 @@ function publicUser(user) {
   }
 }
 
+/** Rejects malformed database IDs before querying MongoDB. */
 function isValidObjectId(value) {
   return typeof value === 'string' && /^[a-f\d]{24}$/i.test(value)
 }
 
+/** Loads users and assignment options for the administrator user-management table. */
 export async function listUsers(req, res, next) {
   try {
     await ensureSystemRoles()
@@ -39,6 +42,7 @@ export async function listUsers(req, res, next) {
   }
 }
 
+/** Applies administrator verification, role, and department changes with safeguards. */
 export async function updateManagedUser(req, res, next) {
   const { id } = req.params
   const { role, isVerified, departmentId } = req.body || {}

@@ -1,5 +1,6 @@
 import mongoose from 'mongoose'
 
+// Stores ownership and workflow state so task lists can be scoped by assignee and department.
 const taskSchema = new mongoose.Schema({
   title: { type: String, required: true, trim: true, minlength: 3, maxlength: 120 },
   description: { type: String, trim: true, maxlength: 2000, default: '' },

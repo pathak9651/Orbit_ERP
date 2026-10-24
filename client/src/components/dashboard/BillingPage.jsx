@@ -3,6 +3,7 @@ import Footer from '../layout/Footer.jsx'
 import { createInvoice, downloadInvoicePdf, emailInvoice as sendInvoiceEmail, getInvoices, updateInvoiceStatus } from '../../services/api.js'
 import './BillingPage.css'
 
+// These status transitions mirror the server's invoice lifecycle rules.
 const transitions = {
   draft: ['sent', 'cancelled'],
   sent: ['paid', 'overdue', 'cancelled'],
@@ -10,23 +11,29 @@ const transitions = {
   paid: [],
   cancelled: [],
 }
+// Keep internal invoice status keys separate from labels shown to users.
 const statusLabels = { draft: 'Draft', sent: 'Sent', paid: 'Paid', overdue: 'Overdue', cancelled: 'Cancelled' }
+// Use one locale-aware formatter for invoice totals and line item amounts.
 const currency = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'INR', maximumFractionDigits: 2 })
 
+/** Supplies a practical default due date for a new invoice. */
 function dueDateDefault() {
   const due = new Date()
   due.setDate(due.getDate() + 14)
   return due.toISOString().slice(0, 10)
 }
 
+/** Formats a due date at midday to avoid shifting its calendar day across timezones. */
 function formatDate(value) {
   return value ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(`${String(value).slice(0, 10)}T12:00:00`)) : '—'
 }
 
+/** Creates a fresh invoice draft without sharing mutable form state. */
 function emptyForm() {
   return { customerName: '', customerEmail: '', dueDate: dueDateDefault(), status: 'sent', notes: '', items: [{ description: '', quantity: '1', unitPrice: '' }] }
 }
 
+/** Lists invoices and supports creation, status changes, PDF download, and email. */
 export default function BillingPage({ user }) {
   const [invoices, setInvoices] = useState([])
   const [form, setForm] = useState(emptyForm)

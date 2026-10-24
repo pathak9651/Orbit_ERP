@@ -1,5 +1,6 @@
 import Footer from '../layout/Footer.jsx'
 
+// Overview cards provide a consistent landing layout until live metrics are available.
 const metrics = [
   { label: 'Total revenue', value: '$0.00', note: 'No activity yet', icon: '↗', tone: 'violet' },
   { label: 'Open orders', value: '0', note: 'Ready when you are', icon: '▧', tone: 'blue' },
@@ -7,6 +8,7 @@ const metrics = [
   { label: 'Items in stock', value: '0', note: 'Add your first item', icon: '▤', tone: 'green' },
 ]
 
+/** Displays one summary value on the workspace landing page. */
 function MetricCard({ metric }) {
   return (
     <article className="metric-card">
@@ -20,6 +22,7 @@ function MetricCard({ metric }) {
   )
 }
 
+/** Introduces the workspace and its main purpose. */
 function WelcomeBanner() {
   return (
     <section className="welcome-banner">
@@ -34,6 +37,7 @@ function WelcomeBanner() {
   )
 }
 
+/** Groups the quick links that help users find common workspace actions. */
 function ActivityPanel() {
   return (
     <section className="activity-panel">
@@ -50,6 +54,7 @@ function ActivityPanel() {
   )
 }
 
+/** Shared home page shown to all roles after sign-in. */
 export default function HomePage({ user, message }) {
   const dateLabel = new Intl.DateTimeFormat('en-US', {
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',

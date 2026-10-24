@@ -1,11 +1,13 @@
 import mongoose from 'mongoose'
 
+// GPS coordinates are optional; when present, validate their geographic ranges.
 const checkInLocationSchema = new mongoose.Schema({
   latitude: { type: Number, required: true, min: -90, max: 90 },
   longitude: { type: Number, required: true, min: -180, max: 180 },
   accuracyMeters: { type: Number, min: 0, default: null },
 }, { _id: false })
 
+// One record per employee and business date makes duplicate check-ins impossible.
 const attendanceSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   dateKey: { type: String, required: true },

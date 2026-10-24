@@ -1,6 +1,7 @@
 import User from '../models/user.js';
 import { TOKEN_COOKIE, verifyAccessToken } from '../services/auth.js';
 
+/** Verifies a cookie or bearer JWT, reloads the account, and attaches it to the request. */
 export async function authenticateToken(req, res, next) {
   const authorization = req.get('authorization');
   const bearer = authorization?.startsWith('Bearer ') ? authorization.slice(7) : null;
@@ -23,6 +24,7 @@ export async function authenticateToken(req, res, next) {
   }
 }
 
+/** Creates a route guard that allows only the listed account roles. */
 export function authorizeRoles(...allowedRoles) {
   return (req, res, next) => {
     if (!req.user || !allowedRoles.includes(req.user.role)) {

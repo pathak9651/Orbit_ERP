@@ -6,6 +6,7 @@ import { checkIn, checkOut, getAdminMonthlyAttendance, getAttendance, updateAtte
 const timeLabel = (value) => value ? new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(new Date(value)) : ' - '
 const dateLabel = (value) => value ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(`${value}T00:00:00`)) : ' - '
 
+/** Requests precise browser GPS coordinates for the employee's attendance record. */
 function requestCurrentLocation() {
   if (!navigator.geolocation) return Promise.reject(new Error('This browser cannot access location. Open the app on localhost or a secure HTTPS connection.'))
   return new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, (error) => {
@@ -18,12 +19,14 @@ function requestCurrentLocation() {
   }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }))
 }
 
+/** Produces the YYYY-MM value used by the administrator attendance report. */
 function currentMonth() {
   const parts = new Intl.DateTimeFormat('en', { year: 'numeric', month: '2-digit' }).formatToParts(new Date())
   const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]))
   return `${values.year}-${values.month}`
 }
 
+/** Loads and displays the role-aware, month-by-month organization attendance report. */
 function AdminMonthlyAttendance() {
   const [month, setMonth] = useState(currentMonth)
   const [report, setReport] = useState({ users: [], days: [] })
@@ -66,6 +69,7 @@ function AdminMonthlyAttendance() {
   </main><Footer /></section>
 }
 
+/** Lets an employee check in/out and review their recorded attendance and GPS location. */
 function PersonalAttendance({ user }) {
   const [data, setData] = useState({ today: null, records: [] })
   const [loading, setLoading] = useState(true)
@@ -129,6 +133,7 @@ function PersonalAttendance({ user }) {
   </main><Footer /></section>
 }
 
+/** Chooses the administrator report or personal attendance screen based on the role. */
 export default function AttendancePage({ user }) {
   return user.role === 'admin' ? <AdminMonthlyAttendance /> : <PersonalAttendance user={user} />
 }

@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import apiRoutes from './routes/api.js';
 
+// Resolve paths relative to this module so production hosting works from any working directory.
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 
@@ -14,6 +15,7 @@ app.use(cookieParser());
 
 app.use('/api', apiRoutes);
 
+// Serve the compiled React app when present; Vite handles it during development.
 const clientDist = path.resolve(currentDirectory, '../client/dist');
 if (fs.existsSync(clientDist)) {
   app.use(express.static(clientDist));

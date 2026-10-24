@@ -3,9 +3,11 @@ import { connectDB } from '../configs/db.js';
 import User from '../models/user.js';
 import { hashPassword } from '../services/auth.js';
 
+// Keep the seed repeatable: it creates the admin if missing and promotes it if present.
 const email = (process.env.ADMIN_EMAIL || 'admin@gmail.com').trim().toLowerCase();
 const password = process.env.ADMIN_PASSWORD;
 
+/** Creates or refreshes the configured administrator account using a hashed password. */
 async function seedAdmin() {
   if (!password) {
     throw new Error('Set ADMIN_PASSWORD before running the admin seed.');

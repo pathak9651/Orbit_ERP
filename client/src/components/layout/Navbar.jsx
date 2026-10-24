@@ -1,5 +1,6 @@
 import { canAccessBilling } from '../../services/permissions.js'
 
+// Employee navigation contains only pages available to every signed-in role.
 const userNavigation = [
   { icon: 'HM', label: 'Home', page: 'overview' },
   { icon: 'TK', label: 'My tasks', page: 'tasks' },
@@ -9,6 +10,7 @@ const userNavigation = [
   { icon: 'ME', label: 'Profile', page: 'profile' },
 ]
 
+// Administrators receive organization-management pages in addition to shared tools.
 const adminNavigation = [
   { icon: 'HM', label: 'Home', page: 'overview' },
   { icon: 'US', label: 'User management', page: 'users' },
@@ -24,6 +26,7 @@ const adminNavigation = [
   { icon: 'ME', label: 'Profile', page: 'profile' },
 ]
 
+/** Renders the responsive workspace navigation for the current user's role. */
 export default function Navbar({ user, currentPage, onNavigate }) {
   const navigation = user.role === 'admin'
     ? adminNavigation

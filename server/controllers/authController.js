@@ -9,6 +9,7 @@ import {
   verifyUserPassword,
 } from '../services/auth.js';
 
+/** Removes private fields and adds role and department labels for API responses. */
 async function toPublicUser(user) {
   const roleRecord = await Role.findOne({ key: user.role }).select('name').lean()
   const builtInNames = { admin: 'Admin', hr: 'HR', manager: 'Manager', employee: 'Employee', housekeeping: 'Housekeeping', accountant: 'Accountant', user: 'Employee' }
@@ -27,6 +28,7 @@ async function toPublicUser(user) {
   }
 }
 
+/** Validates a registration request and queues its account for administrator approval. */
 export async function signUp(req, res, next) {
   const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
   const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
@@ -61,6 +63,7 @@ export async function signUp(req, res, next) {
   }
 }
 
+/** Checks credentials and starts a cookie-backed JWT session for a verified account. */
 export async function signIn(req, res, next) {
   const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
   const password = typeof req.body?.password === 'string' ? req.body.password : '';
@@ -83,10 +86,12 @@ export async function signIn(req, res, next) {
   }
 }
 
+/** Returns the authenticated account in its public response shape. */
 export async function getCurrentUser(req, res) {
   return res.json({ user: await toPublicUser(req.user) });
 }
 
+/** Updates a user's name or email, requiring current-password proof for email changes. */
 export async function updateProfile(req, res, next) {
   const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
   const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
@@ -121,6 +126,7 @@ export async function updateProfile(req, res, next) {
   }
 }
 
+/** Changes the password only after verifying the current password, then refreshes the token. */
 export async function changePassword(req, res, next) {
   const currentPassword = typeof req.body?.currentPassword === 'string' ? req.body.currentPassword : '';
   const newPassword = typeof req.body?.newPassword === 'string' ? req.body.newPassword : '';
@@ -151,11 +157,13 @@ export async function changePassword(req, res, next) {
   }
 }
 
+/** Clears the browser's authentication cookie to end the session. */
 export function signOut(req, res) {
   clearAuthCookie(res);
   return res.status(204).end();
 }
 
+/** Provides a minimal protected response for the administrator access check endpoint. */
 export function getAdminDashboard(req, res) {
   return res.json({ message: 'Admin access granted.' });
 }

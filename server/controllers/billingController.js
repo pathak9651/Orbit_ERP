@@ -6,7 +6,9 @@ import { notifyUsers } from '../services/notifications.js'
 import { createInvoicePdf } from '../services/invoicePdf.js'
 import { sendInvoiceEmail } from '../services/mailer.js'
 
+// Match the model's allowed invoice states before accepting client transitions.
 const validStatuses = ['draft', 'sent', 'paid', 'overdue', 'cancelled']
+// Prevent invalid jumps in the invoice lifecycle while permitting explicit cancellation.
 const allowedTransitions = {
   draft: ['sent', 'cancelled'],
   sent: ['paid', 'overdue', 'cancelled'],
@@ -15,6 +17,7 @@ const allowedTransitions = {
   cancelled: [],
 }
 
+/** Removes database-only invoice fields before returning data to the client. */
 function publicInvoice(invoice) {
   return {
     id: String(invoice._id), invoiceNumber: invoice.invoiceNumber, customerName: invoice.customerName,
@@ -27,6 +30,7 @@ function publicInvoice(invoice) {
   }
 }
 
+/** Generates and emails the invoice PDF, recording delivery success or failure. */
 async function deliverInvoice(invoice) {
   invoice.emailStatus = 'pending'
   invoice.emailError = ''
@@ -47,6 +51,7 @@ async function deliverInvoice(invoice) {
   }
 }
 
+/** Lists invoices in reverse creation order for users with billing access. */
 export async function listInvoices(req, res, next) {
   try {
     const invoices = await Invoice.find().populate('createdBy', 'name').populate('statusHistory.actor', 'name').sort({ createdAt: -1 }).limit(500).lean()
@@ -54,6 +59,7 @@ export async function listInvoices(req, res, next) {
   } catch (error) { return next(error) }
 }
 
+/** Validates invoice details, calculates line totals, and saves a draft. */
 export async function createInvoice(req, res, next) {
   const customerName = typeof req.body?.customerName === 'string' ? req.body.customerName.trim() : ''
   const customerEmail = typeof req.body?.customerEmail === 'string' ? req.body.customerEmail.trim().toLowerCase() : ''
@@ -104,6 +110,7 @@ export async function createInvoice(req, res, next) {
   } catch (error) { return next(error) }
 }
 
+/** Changes an invoice status only when the requested lifecycle transition is allowed. */
 export async function updateInvoiceStatus(req, res, next) {
   if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ message: 'Invalid invoice ID.' })
   const status = req.body?.status
@@ -132,6 +139,7 @@ export async function updateInvoiceStatus(req, res, next) {
   } catch (error) { return next(error) }
 }
 
+/** Streams a generated PDF attachment for an existing invoice. */
 export async function downloadInvoice(req, res, next) {
   if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ message: 'Invalid invoice ID.' })
   try {
@@ -145,6 +153,7 @@ export async function downloadInvoice(req, res, next) {
   } catch (error) { return next(error) }
 }
 
+/** Emails the invoice PDF to the customer and returns its delivery result. */
 export async function emailInvoice(req, res, next) {
   if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ message: 'Invalid invoice ID.' })
   try {

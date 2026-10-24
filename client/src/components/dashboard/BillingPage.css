@@ -1,3 +1,4 @@
+/* Page-specific invoice forms, status controls, totals, and responsive tables. */
 .billing-page { display: grid; align-content: start; gap: 16px; }
 .billing-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .billing-summary-card { display: grid; gap: 7px; padding: 16px; }

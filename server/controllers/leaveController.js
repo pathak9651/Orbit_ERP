@@ -3,12 +3,15 @@ import LeaveRequest from '../models/leaveRequest.js'
 import User from '../models/user.js'
 import { notifyUsers } from '../services/notifications.js'
 
+// Validate calendar-day strings before persisting them so timezone shifts cannot alter leave dates.
 const validDateKey = (value) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00.000Z`)) && new Date(`${value}T00:00:00.000Z`).toISOString().slice(0, 10) === value
+// Populate the same readable people fields for list, review, and archive responses.
 const populateLeave = (query) => query
   .populate('requester', 'name email role department isVerified')
   .populate('department', 'name')
   .populate('history.actor', 'name role')
 
+/** Chooses the first approver stage based on the requester's place in the hierarchy. */
 async function firstStageFor(user) {
   if (user.role === 'admin') return 'hr'
   if (user.role === 'hr' || user.role === 'manager') return user.role === 'manager' ? 'hr' : 'admin'
@@ -17,6 +20,7 @@ async function firstStageFor(user) {
   return managerExists ? 'manager' : 'hr'
 }
 
+/** Lists leave requests the user submitted or is authorized to review. */
 export async function listLeaveRequests(req, res, next) {
   try {
     const ownFilter = { requester: req.user._id }
@@ -34,6 +38,7 @@ export async function listLeaveRequests(req, res, next) {
   } catch (error) { return next(error) }
 }
 
+/** Creates a leave request and routes it to its first eligible approval stage. */
 export async function createLeaveRequest(req, res, next) {
   const { leaveType, startDate, endDate } = req.body || {}
   const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : ''
@@ -74,6 +79,7 @@ export async function createLeaveRequest(req, res, next) {
   } catch (error) { return next(error) }
 }
 
+/** Forwards, approves, or rejects a request while preserving each reviewer's message. */
 export async function actOnLeaveRequest(req, res, next) {
   if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ message: 'Invalid leave request ID.' })
   const { action } = req.body || {}
@@ -137,6 +143,7 @@ export async function actOnLeaveRequest(req, res, next) {
 
 
 
+/** Returns approved leave records for a selected calendar month for administrators. */
 export async function listAdminApprovedLeaves(req, res, next) {
   const month = typeof req.query.month === 'string' ? req.query.month : ''
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {

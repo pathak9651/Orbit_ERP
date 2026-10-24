@@ -1,5 +1,6 @@
 import mongoose from 'mongoose'
 
+// Persists recipients and delivery results so users can review sent workspace messages.
 const emailLogSchema = new mongoose.Schema({
   sender: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   recipients: [{

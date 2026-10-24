@@ -1,3 +1,4 @@
+/** Coordinates session state, role-based navigation, page rendering, and notification refreshes. */
 import { useEffect, useState } from 'react'
 import AuthScreen from './components/auth/AuthScreen.jsx'
 import HomePage from './components/dashboard/HomePage.jsx'
@@ -27,6 +28,7 @@ export default function App() {
   const [notifications, setNotifications] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
 
+  // Restore the cookie-backed session at startup so a page refresh does not sign the user out.
   useEffect(() => {
     let isMounted = true
     getCurrentUser()
@@ -38,6 +40,7 @@ export default function App() {
 
   const isAuthenticated = Boolean(user)
 
+  // Recheck the session periodically so disabled or expired accounts lose access promptly.
   useEffect(() => {
     if (!isAuthenticated || isSigningOut) return undefined
     let isActive = true
@@ -66,6 +69,7 @@ export default function App() {
     }
   }, [isAuthenticated, isSigningOut])
 
+  // Poll for notifications while signed in; the server remains the source of truth.
   useEffect(() => {
     if (!isAuthenticated || isSigningOut) return undefined
     let isActive = true

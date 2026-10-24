@@ -4,6 +4,7 @@ import Task from '../models/task.js'
 import User from '../models/user.js'
 import { notifyUsers } from '../services/notifications.js'
 
+/** Resolves a role's hierarchy rank so assignment permissions stay data-driven. */
 async function roleLevel(roleKey) {
   let role = await Role.findOne({ key: roleKey }).select('level').lean()
   if (!role) {
@@ -14,14 +15,17 @@ async function roleLevel(roleKey) {
   return role.level ?? 10
 }
 
+/** Ensures built-in roles exist before hierarchy-based task checks run. */
 async function ensureRoles() {
   await Role.bulkWrite(SYSTEM_ROLES.map((role) => ({
     updateOne: { filter: { key: role.key }, update: { $set: { ...role, isSystem: true } }, upsert: true },
   })))
 }
 
+/** Confirms a supplied task or user ID can be safely used in a MongoDB query. */
 function validId(value) { return mongoose.isValidObjectId(value) }
 
+/** Lists verified employees below the current user in the task-assignment hierarchy. */
 export async function getTaskAssignees(req, res, next) {
   try {
     await ensureRoles()
@@ -38,6 +42,7 @@ export async function getTaskAssignees(req, res, next) {
   } catch (error) { return next(error) }
 }
 
+/** Returns tasks scoped to the user's role, team, and assignments. */
 export async function listTasks(req, res, next) {
   try {
     const filter = {}
@@ -55,6 +60,7 @@ export async function listTasks(req, res, next) {
   } catch (error) { return next(error) }
 }
 
+/** Validates and assigns work while enforcing role and department boundaries. */
 export async function createTask(req, res, next) {
   const title = typeof req.body?.title === 'string' ? req.body.title.trim() : ''
   const description = typeof req.body?.description === 'string' ? req.body.description.trim() : ''
@@ -83,6 +89,7 @@ export async function createTask(req, res, next) {
   } catch (error) { return next(error) }
 }
 
+/** Updates a task status and notifies its assignee and creator when it changes. */
 export async function updateTaskStatus(req, res, next) {
   const { status } = req.body || {}
   if (!['pending', 'in-progress', 'completed'].includes(status)) return res.status(400).json({ message: 'Choose a valid task status.' })

@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 
+// Defines account identity, password privacy, organization assignment, and verification state.
 const userSchema = new mongoose.Schema({
     name: {
         type: String,
@@ -36,6 +37,7 @@ const userSchema = new mongoose.Schema({
     }
 }, { timestamps: true });
 
+// Build a stable, human-readable ID from creation time and the unique MongoDB record ID.
 userSchema.virtual('accountId').get(function getAccountId() {
     const createdAt = this.createdAt || this._id.getTimestamp();
     const timestamp = createdAt.toISOString();
