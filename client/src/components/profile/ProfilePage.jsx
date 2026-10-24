@@ -20,7 +20,6 @@ export default function ProfilePage({ user, onUserUpdated, notice }) {
   const [passwordBusy, setPasswordBusy] = useState(false)
   const [profileMessage, setProfileMessage] = useState(null)
   const [passwordMessage, setPasswordMessage] = useState(null)
-
   async function handleProfileSubmit(event) {
     event.preventDefault()
     const form = event.currentTarget
@@ -150,6 +149,7 @@ export default function ProfilePage({ user, onUserUpdated, notice }) {
     </section>
   )
 }
+
 
 
 

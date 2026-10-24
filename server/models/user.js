@@ -34,6 +34,12 @@ const userSchema = new mongoose.Schema({
     isVerified: {
         type: Boolean,
         default: true
+    },
+    // Changes whenever existing sessions must be invalidated for this account.
+    tokenVersion: {
+        type: Number,
+        default: 0,
+        min: 0
     }
 }, { timestamps: true });
 

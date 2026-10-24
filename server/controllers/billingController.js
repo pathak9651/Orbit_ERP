@@ -4,7 +4,9 @@ import Department from '../models/department.js'
 import User from '../models/user.js'
 import { notifyUsers } from '../services/notifications.js'
 import { createInvoicePdf } from '../services/invoicePdf.js'
+import { getPaginationOptions, paginateQuery } from '../utils/pagination.js'
 import { sendInvoiceEmail } from '../services/mailer.js'
+import { recordAuditEvent } from '../services/audit.js'
 
 // Match the model's allowed invoice states before accepting client transitions.
 const validStatuses = ['draft', 'sent', 'paid', 'overdue', 'cancelled']
@@ -54,8 +56,33 @@ async function deliverInvoice(invoice) {
 /** Lists invoices in reverse creation order for users with billing access. */
 export async function listInvoices(req, res, next) {
   try {
-    const invoices = await Invoice.find().populate('createdBy', 'name').populate('statusHistory.actor', 'name').sort({ createdAt: -1 }).limit(500).lean()
-    return res.json({ invoices: invoices.map(publicInvoice) })
+    const filter = {}
+    const status = typeof req.query.status === 'string' ? req.query.status : 'all'
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : ''
+    if (status !== 'all') {
+      if (!validStatuses.includes(status)) return res.status(400).json({ message: 'Choose a valid invoice status.' })
+      filter.status = status
+    }
+    if (search) {
+      const safeSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      filter.$or = [
+        { invoiceNumber: new RegExp(safeSearch, 'i') },
+        { customerName: new RegExp(safeSearch, 'i') },
+        { customerEmail: new RegExp(safeSearch, 'i') },
+      ]
+    }
+    const [invoicePage, summaryRows] = await Promise.all([paginateQuery(
+      Invoice.find(filter).populate('createdBy', 'name').populate('statusHistory.actor', 'name').sort({ createdAt: -1 }).lean(),
+      Invoice.countDocuments(filter),
+      getPaginationOptions(req.query),
+    ), Invoice.aggregate([{ $group: { _id: '$status', count: { $sum: 1 }, total: { $sum: '$total' } } }])])
+    const summary = summaryRows.reduce((totals, row) => {
+      if (row._id === 'paid') totals.paid = row.total
+      if (['sent', 'overdue'].includes(row._id)) totals.outstanding += row.total
+      if (row._id === 'overdue') totals.overdue = row.count
+      return totals
+    }, { paid: 0, outstanding: 0, overdue: 0 })
+    return res.json({ invoices: invoicePage.items.map(publicInvoice), pagination: invoicePage.pagination, summary })
   } catch (error) { return next(error) }
 }
 
@@ -124,6 +151,7 @@ export async function updateInvoiceStatus(req, res, next) {
     invoice.status = status
     invoice.statusHistory.push({ status, actor: req.user._id })
     await invoice.save()
+    await recordAuditEvent(req, { eventType: status === 'paid' ? 'financial_approval' : 'invoice_status_changed', targetUser: invoice.createdBy, details: { invoiceNumber: invoice.invoiceNumber, status } })
     const emailSent = status === 'sent' ? await deliverInvoice(invoice) : null
     const recipients = [invoice.createdBy]
     const accountsDepartmentIds = await Department.find({ name: /account/i }).distinct('_id')

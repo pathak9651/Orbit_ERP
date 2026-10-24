@@ -10,11 +10,12 @@ import AttendancePage from './components/dashboard/AttendancePage.jsx'
 import LeavePage from './components/dashboard/LeavePage.jsx'
 import EmailPage from './components/dashboard/EmailPage.jsx'
 import BillingPage from './components/dashboard/BillingPage.jsx'
+import AuditEventsPage from './components/dashboard/AuditEventsPage.jsx'
 import ProfilePage from './components/profile/ProfilePage.jsx'
 import Navbar from './components/layout/Navbar.jsx'
 import HorizontalNavbar from './components/layout/HorizontalNavbar.jsx'
 import { canAccessBilling } from './services/permissions.js'
-import { getCurrentUser, getNotifications, markAllNotificationsRead, markNotificationRead, signIn, signOut, signUp } from './services/api.js'
+import { getCurrentUser, getNotifications, markAllNotificationsRead, markNotificationRead, requestPasswordReset, resetPassword, signIn, signOut, signUp } from './services/api.js'
 
 export default function App() {
   const [authMode, setAuthMode] = useState('login')
@@ -22,11 +23,23 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState('overview')
   const [authError, setAuthError] = useState('')
   const [authNotice, setAuthNotice] = useState('')
+  const [resetToken, setResetToken] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSigningOut, setIsSigningOut] = useState(false)
   const [notifications, setNotifications] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
+  const [notificationPagination, setNotificationPagination] = useState(null)
+  const [notificationPage, setNotificationPage] = useState(1)
+
+  useEffect(() => {
+    const resetToken = new URLSearchParams(window.location.search).get('resetToken')
+    if (resetToken) {
+      setResetToken(resetToken)
+      setAuthMode('reset')
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [])
 
   // Restore the cookie-backed session at startup so a page refresh does not sign the user out.
   useEffect(() => {
@@ -75,16 +88,17 @@ export default function App() {
     let isActive = true
     async function refreshNotifications() {
       try {
-        const result = await getNotifications()
+        const result = await getNotifications({ page: notificationPage })
         if (!isActive) return
         setNotifications(result.notifications)
         setUnreadCount(result.unreadCount)
+        setNotificationPagination(result.pagination)
       } catch { /* The notification feed retries on the next refresh. */ }
     }
     refreshNotifications()
     const timer = window.setInterval(refreshNotifications, 5000)
     return () => { isActive = false; window.clearInterval(timer) }
-  }, [isAuthenticated, isSigningOut])
+  }, [isAuthenticated, isSigningOut, notificationPage])
   async function handleAuthSubmit(event) {
     event.preventDefault()
     setAuthError('')
@@ -100,10 +114,20 @@ export default function App() {
         setUnreadCount(0)
         setCurrentPage('overview')
         setUser(result.user)
-      } else {
+      } else if (authMode === 'signup') {
         const result = await signUp(details)
         setAuthMode('login')
         setAuthNotice(result.message || 'Your account request was sent for approval.')
+      } else if (authMode === 'forgot') {
+        const result = await requestPasswordReset(details.email)
+        setAuthMode('login')
+        setAuthNotice(result.message)
+      } else if (authMode === 'reset') {
+        if (details.newPassword !== details.confirmPassword) throw new Error('The new passwords do not match.')
+        const result = await resetPassword({ token: details.token || resetToken, newPassword: details.newPassword })
+        setResetToken('')
+        setAuthMode('login')
+        setAuthNotice(result.message)
       }
     } catch (error) {
       setAuthError(error.message || 'Could not connect to the server.')
@@ -160,13 +184,14 @@ export default function App() {
         error={authError}
         notice={authNotice}
         busy={isSubmitting}
+        resetToken={resetToken}
       />
     )
   }
 
   return (
     <div className="workspace-layout">
-      <HorizontalNavbar user={user} onSignOut={handleSignOut} signingOut={isSigningOut} notifications={notifications} unreadCount={unreadCount} onOpenNotification={handleNotificationOpen} onMarkAllNotificationsRead={handleMarkAllNotificationsRead} />
+      <HorizontalNavbar user={user} onSignOut={handleSignOut} signingOut={isSigningOut} notifications={notifications} unreadCount={unreadCount} pagination={notificationPagination} onNotificationPageChange={setNotificationPage} onOpenNotification={handleNotificationOpen} onMarkAllNotificationsRead={handleMarkAllNotificationsRead} />
       <div className="workspace-shell">
         <Navbar
           user={user}
@@ -185,6 +210,8 @@ export default function App() {
             ? <BillingPage user={user} />
           : currentPage === 'profile'
           ? <ProfilePage user={user} onUserUpdated={setUser} notice={authError} />
+          : user.role === 'admin' && currentPage === 'audit'
+            ? <AuditEventsPage />
           : user.role === 'admin' && currentPage === 'users'
             ? <UserManagementPage currentUserId={user.id} />
           : user.role === 'admin' && currentPage === 'organization'

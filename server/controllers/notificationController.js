@@ -1,15 +1,16 @@
 import mongoose from 'mongoose'
 import Notification from '../models/notification.js'
+import { getPaginationOptions, paginateQuery } from '../utils/pagination.js'
 
 /** Returns a user's recent notifications and unread count for the navigation bell. */
 export async function listNotifications(req, res, next) {
   try {
     const recipient = req.user._id
-    const [notifications, unreadCount] = await Promise.all([
-      Notification.find({ recipient }).sort({ createdAt: -1 }).limit(40).lean(),
+    const [notificationPage, unreadCount] = await Promise.all([
+      paginateQuery(Notification.find({ recipient }).sort({ createdAt: -1 }).lean(), Notification.countDocuments({ recipient }), getPaginationOptions(req.query)),
       Notification.countDocuments({ recipient, readAt: null }),
     ])
-    return res.json({ unreadCount, notifications: notifications.map((item) => ({
+    return res.json({ unreadCount, pagination: notificationPage.pagination, notifications: notificationPage.items.map((item) => ({
       id: String(item._id), type: item.type, title: item.title, message: item.message,
       page: item.page, entityId: item.entityId, actorName: item.actorName,
       readAt: item.readAt, createdAt: item.createdAt,

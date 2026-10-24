@@ -7,6 +7,7 @@
     "dev:client": "npm run dev --prefix client",
     "dev:server": "npm run dev --prefix server",
     "build": "npm run build --prefix client",
+    "test": "npm run test --prefix server && npm run test --prefix client",
     "start": "npm start --prefix server"
   },
   "devDependencies": {

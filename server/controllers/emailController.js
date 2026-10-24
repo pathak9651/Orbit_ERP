@@ -1,7 +1,9 @@
 import EmailLog from '../models/emailLog.js'
 import User from '../models/user.js'
+import Department from '../models/department.js'
 import { sendWorkspaceEmail } from '../services/mailer.js'
 import { notifyUsers } from '../services/notifications.js'
+import { getPaginationOptions, paginateQuery } from '../utils/pagination.js'
 
 // Bound each group message to keep delivery time and mail-provider load predictable.
 const EMAIL_LIMIT = 200
@@ -9,15 +11,28 @@ const EMAIL_LIMIT = 200
 /** Lists verified staff members that the current user is allowed to email. */
 export async function listEmailDirectory(req, res, next) {
   try {
-    const users = await User.find({ isVerified: { $ne: false } })
+    const filter = { isVerified: { $ne: false } }
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : ''
+    if (search) {
+      const safeSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      filter.$or = [{ name: new RegExp(safeSearch, 'i') }, { email: new RegExp(safeSearch, 'i') }]
+    }
+    if (typeof req.query.role === 'string' && req.query.role) filter.role = req.query.role === 'employee' ? { $in: ['employee', 'user'] } : req.query.role
+    if (typeof req.query.department === 'string' && req.query.department) filter.department = req.query.department
+    const result = await paginateQuery(User.find(filter)
       .select('name email role department')
       .populate('department', 'name')
       .sort({ name: 1 })
-      .lean()
-    return res.json({ users: users.map(({ _id, name, email, role, department }) => ({
+      .lean(), User.countDocuments(filter), getPaginationOptions(req.query))
+    const [roles, departments] = await Promise.all([
+      User.distinct('role', { isVerified: { $ne: false } }),
+      User.distinct('department', { isVerified: { $ne: false }, department: { $ne: null } }),
+    ])
+    const departmentNames = await Department.find({ _id: { $in: departments } }).select('name').sort({ name: 1 }).lean()
+    return res.json({ users: result.items.map(({ _id, name, email, role, department }) => ({
       id: String(_id), name, email, role: role === 'user' ? 'employee' : role,
-      department: department?.name || '',
-    })) })
+      department: department?.name || '', departmentId: department ? String(department._id) : '',
+    })), pagination: result.pagination, roles: roles.map((role) => role === 'user' ? 'employee' : role), departments: departmentNames.map(({ _id, name }) => ({ id: String(_id), name })) })
   } catch (error) { return next(error) }
 }
 
@@ -74,12 +89,12 @@ export async function sendEmail(req, res, next) {
 export async function listSentEmails(req, res, next) {
   try {
     const filter = req.user.role === 'admin' ? {} : { sender: req.user._id }
-    const emails = await EmailLog.find(filter).populate('sender', 'name email role').sort({ createdAt: -1 }).limit(50).lean()
-    return res.json({ emails: emails.map((item) => ({
+    const result = await paginateQuery(EmailLog.find(filter).populate('sender', 'name email role').sort({ createdAt: -1 }).lean(), EmailLog.countDocuments(filter), getPaginationOptions(req.query))
+    return res.json({ emails: result.items.map((item) => ({
       id: String(item._id), subject: item.subject, message: item.message, status: item.status,
       sender: item.sender ? { name: item.sender.name, email: item.sender.email, role: item.sender.role } : null,
       sentAt: item.sentAt, createdAt: item.createdAt, error: item.status === 'failed' ? item.error : '',
       recipients: item.recipients.map(({ name, email, role, department }) => ({ name, email, role, department })),
-    })) })
+    })), pagination: result.pagination })
   } catch (error) { return next(error) }
 }

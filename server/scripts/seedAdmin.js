@@ -26,6 +26,7 @@ async function seedAdmin() {
     user.password = passwordHash;
     user.role = 'admin';
     user.isVerified = true;
+    user.tokenVersion = (user.tokenVersion ?? 0) + 1;
     await user.save();
   } else {
     await User.create({

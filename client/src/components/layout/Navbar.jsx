@@ -22,6 +22,7 @@ const adminNavigation = [
   { icon: 'BI', label: 'Bills and invoices', page: 'billing' },
   { icon: 'RV', label: 'Revenue', page: 'revenue' },
   { icon: 'RP', label: 'Reports', page: 'reports' },
+  { icon: 'AU', label: 'Security audit', page: 'audit' },
   { icon: 'RD', label: 'Roles and departments', page: 'organization' },
   { icon: 'ME', label: 'Profile', page: 'profile' },
 ]

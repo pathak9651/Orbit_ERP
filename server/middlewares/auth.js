@@ -1,5 +1,5 @@
 import User from '../models/user.js';
-import { TOKEN_COOKIE, verifyAccessToken } from '../services/auth.js';
+import { TOKEN_COOKIE, getSessionRejectionReason, verifyAccessToken } from '../services/auth.js';
 
 /** Verifies a cookie or bearer JWT, reloads the account, and attaches it to the request. */
 export async function authenticateToken(req, res, next) {
@@ -10,9 +10,11 @@ export async function authenticateToken(req, res, next) {
 
   try {
     const payload = verifyAccessToken(token);
-    const user = await User.findById(payload.sub).select('name email role department isVerified createdAt updatedAt').populate('department', 'name');
-    if (!user) return res.status(401).json({ message: 'Account no longer exists.' });
-    if (user.isVerified === false) return res.status(403).json({ message: 'Your account is awaiting administrator verification.' });
+    const user = await User.findById(payload.sub).select('name email role department isVerified tokenVersion createdAt updatedAt').populate('department', 'name');
+    const rejectionReason = getSessionRejectionReason(payload, user);
+    if (rejectionReason === 'account-missing') return res.status(401).json({ message: 'Account no longer exists.' });
+    if (rejectionReason === 'account-unverified') return res.status(403).json({ message: 'Your account is awaiting administrator verification.' });
+    if (rejectionReason === 'token-revoked') return res.status(401).json({ message: 'Your session has expired. Please sign in again.' });
     req.user = user;
     req.auth = { userId: payload.sub, role: payload.role };
     return next();

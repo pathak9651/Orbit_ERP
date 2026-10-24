@@ -1,6 +1,5 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { timingSafeEqual } from 'node:crypto';
 
 // Shared cookie key ensures sign-in, authentication, and sign-out use the same session token.
 export const TOKEN_COOKIE = 'orbit_token';
@@ -25,25 +24,17 @@ export function verifyPassword(password, passwordHash) {
   return bcrypt.compare(password, passwordHash);
 }
 
-/** Verifies bcrypt passwords and upgrades legacy stored values after successful login. */
+/** Verifies passwords only against well-formed bcrypt hashes; plaintext values are rejected. */
 export async function verifyUserPassword(user, password) {
-  const storedPassword = user.password;
-  if (/^\$2[aby]\$/.test(storedPassword)) return verifyPassword(password, storedPassword);
-
-  // Upgrade accounts created by the previous plaintext-password implementation on login.
-  const candidate = Buffer.from(password);
-  const stored = Buffer.from(storedPassword);
-  const matches = candidate.length === stored.length && timingSafeEqual(candidate, stored);
-  if (matches) {
-    user.password = await hashPassword(password);
-    await user.save();
-  }
-  return matches;
+  const storedPassword = user?.password;
+  const bcryptHashPattern = /^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/;
+  if (typeof storedPassword !== 'string' || !bcryptHashPattern.test(storedPassword)) return false;
+  return verifyPassword(password, storedPassword);
 }
 
 /** Signs the token payload used to identify the authenticated account. */
 export function createAccessToken(user) {
-  return jwt.sign({ role: user.role }, getJwtSecret(), {
+  return jwt.sign({ role: user.role, tokenVersion: user.tokenVersion ?? 0 }, getJwtSecret(), {
     subject: user.id,
     expiresIn: TOKEN_LIFETIME,
     algorithm: 'HS256',
@@ -53,6 +44,21 @@ export function createAccessToken(user) {
 /** Validates a signed JWT and returns its trusted identity claims. */
 export function verifyAccessToken(token) {
   return jwt.verify(token, getJwtSecret(), { algorithms: ['HS256'] });
+}
+
+/** Accepts pre-version tokens as version zero during rollout and rejects revoked tokens. */
+export function isTokenVersionCurrent(payload, currentVersion) {
+  const tokenVersion = payload?.tokenVersion ?? 0;
+  const storedVersion = currentVersion ?? 0;
+  return Number.isInteger(tokenVersion) && Number.isInteger(storedVersion) && tokenVersion === storedVersion;
+}
+
+/** Explains why a verified JWT no longer represents an active account session. */
+export function getSessionRejectionReason(payload, user) {
+  if (!user) return 'account-missing';
+  if (user.isVerified === false) return 'account-unverified';
+  if (!isTokenVersionCurrent(payload, user.tokenVersion)) return 'token-revoked';
+  return null;
 }
 
 /** Centralizes cookie security and expiry options for set and clear operations. */

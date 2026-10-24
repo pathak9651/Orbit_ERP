@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { getEmailDirectory, getSentEmails, sendWorkspaceEmail } from '../../services/api.js'
+import Pagination from '../common/Pagination.jsx'
 import './EmailPage.css'
 
 /** Converts an internal role key into a readable directory label. */
@@ -16,6 +17,12 @@ function formatDate(value) {
 export default function EmailPage({ user }) {
   const [directory, setDirectory] = useState([])
   const [history, setHistory] = useState([])
+  const [directoryPagination, setDirectoryPagination] = useState(null)
+  const [historyPagination, setHistoryPagination] = useState(null)
+  const [directoryPage, setDirectoryPage] = useState(1)
+  const [historyPage, setHistoryPage] = useState(1)
+  const [roles, setRoles] = useState([])
+  const [departments, setDepartments] = useState([])
   const [selected, setSelected] = useState([])
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState('all')
@@ -28,33 +35,34 @@ export default function EmailPage({ user }) {
   const [notice, setNotice] = useState('')
 
   async function refresh() {
-    const [directoryResult, historyResult] = await Promise.all([getEmailDirectory(), getSentEmails()])
+    const [directoryResult, historyResult] = await Promise.all([getEmailDirectory({ page: directoryPage, search: search.trim(), role: roleFilter === 'all' ? '' : roleFilter, department: departmentFilter === 'all' ? '' : departmentFilter }), getSentEmails({ page: historyPage })])
     setDirectory(directoryResult.users)
+    setDirectoryPagination(directoryResult.pagination)
+    setRoles(directoryResult.roles || [])
+    setDepartments(directoryResult.departments || [])
     setHistory(historyResult.emails)
+    setHistoryPagination(historyResult.pagination)
   }
 
   useEffect(() => {
     let active = true
-    Promise.all([getEmailDirectory(), getSentEmails()])
+    Promise.all([getEmailDirectory({ page: directoryPage, search: search.trim(), role: roleFilter === 'all' ? '' : roleFilter, department: departmentFilter === 'all' ? '' : departmentFilter }), getSentEmails({ page: historyPage })])
       .then(([directoryResult, historyResult]) => {
         if (!active) return
         setDirectory(directoryResult.users)
+        setDirectoryPagination(directoryResult.pagination)
+        setRoles(directoryResult.roles || [])
+        setDepartments(directoryResult.departments || [])
         setHistory(historyResult.emails)
+        setHistoryPagination(historyResult.pagination)
       })
       .catch((requestError) => { if (active) setError(requestError.message) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [])
+  }, [directoryPage, historyPage, search, roleFilter, departmentFilter])
 
-  const roles = useMemo(() => [...new Set(directory.map((person) => person.role))].sort(), [directory])
-  const departments = useMemo(() => [...new Set(directory.map((person) => person.department).filter(Boolean))].sort(), [directory])
-  const filteredUsers = useMemo(() => {
-    const query = search.trim().toLowerCase()
-    return directory.filter((person) => (roleFilter === 'all' || person.role === roleFilter)
-      && (departmentFilter === 'all' || person.department === departmentFilter)
-      && (!query || `${person.name} ${person.email} ${person.role} ${person.department}`.toLowerCase().includes(query)))
-  }, [directory, search, roleFilter, departmentFilter])
-  const selectedUsers = useMemo(() => directory.filter((person) => selected.includes(person.id)), [directory, selected])
+  const filteredUsers = directory
+  const selectedUsersOnPage = directory.filter((person) => selected.includes(person.id))
 
   function togglePerson(id) {
     setSelected((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])
@@ -104,16 +112,17 @@ export default function EmailPage({ user }) {
     <form className="email-composer panel-card" onSubmit={handleSubmit}>
       <div className="email-section-heading"><div><h2>Compose email</h2><p>Choose one person, a team, or multiple people.</p></div><span className="email-recipient-count">{selected.length} selected</span></div>
       <div className="email-recipient-toolbar">
-        {user.role === 'admin' && <button className="button button-secondary" type="button" onClick={selectAllEmployees} disabled={!directory.length}>All employees</button>}
+        {user.role === 'admin' && <button className="button button-secondary" type="button" onClick={selectAllEmployees} disabled={!directory.length}>Select employees on this page</button>}
         <button className="text-button" type="button" onClick={selectVisible} disabled={!filteredUsers.length}>{filteredUsers.length && filteredUsers.every((person) => selected.includes(person.id)) ? 'Clear visible' : 'Select visible'}</button>
         <button className="text-button" type="button" onClick={() => setSelected([])} disabled={!selected.length}>Clear selection</button>
       </div>
 
       <div className="email-directory-filters">
-        <label className="field-label">Find people<input type="search" placeholder="Name, email, role, or department" value={search} onChange={(event) => setSearch(event.target.value)} /></label>
-        <label className="field-label">Role<select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)}><option value="all">All roles</option>{roles.map((role) => <option value={role} key={role}>{displayRole(role)}</option>)}</select></label>
-        <label className="field-label">Department<select value={departmentFilter} onChange={(event) => setDepartmentFilter(event.target.value)}><option value="all">All departments</option>{departments.map((department) => <option value={department} key={department}>{department}</option>)}</select></label>
+        <label className="field-label">Find people<input type="search" placeholder="Name or email" value={search} onChange={(event) => { setSearch(event.target.value); setDirectoryPage(1) }} /></label>
+        <label className="field-label">Role<select value={roleFilter} onChange={(event) => { setRoleFilter(event.target.value); setDirectoryPage(1) }}><option value="all">All roles</option>{roles.map((role) => <option value={role} key={role}>{displayRole(role)}</option>)}</select></label>
+        <label className="field-label">Department<select value={departmentFilter} onChange={(event) => { setDepartmentFilter(event.target.value); setDirectoryPage(1) }}><option value="all">All departments</option>{departments.map((department) => <option value={department.id} key={department.id}>{department.name}</option>)}</select></label>
       </div>
+      <Pagination pagination={directoryPagination} onPageChange={setDirectoryPage} disabled={loading} />
 
       <div className="email-directory" aria-label="Recipient directory">
         {loading ? <p className="email-empty">Loading users…</p> : filteredUsers.length ? filteredUsers.map((person) => <label className={`email-person ${selected.includes(person.id) ? 'is-selected' : ''}`} key={person.id}>
@@ -124,7 +133,7 @@ export default function EmailPage({ user }) {
         </label>) : <p className="email-empty">No users match these filters.</p>}
       </div>
 
-      {selectedUsers.length > 0 && <div className="email-selected-summary" aria-live="polite"><strong>To ({selectedUsers.length})</strong><span>{selectedUsers.slice(0, 4).map((person) => person.name).join(', ')}{selectedUsers.length > 4 ? ` and ${selectedUsers.length - 4} more` : ''}</span></div>}
+      {selected.length > 0 && <div className="email-selected-summary" aria-live="polite"><strong>To ({selected.length})</strong><span>{selectedUsersOnPage.slice(0, 4).map((person) => person.name).join(', ')}{selected.length > Math.min(4, selectedUsersOnPage.length) ? ` and ${selected.length - Math.min(4, selectedUsersOnPage.length)} more` : ''}</span></div>}
 
       <label className="field-label email-subject-field">Subject<input type="text" maxLength={180} required value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="What is this email about?" /></label>
       <label className="field-label email-message-field">Message<textarea maxLength={20000} required rows={8} value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Write your message…" /></label>
@@ -136,6 +145,7 @@ export default function EmailPage({ user }) {
         <summary><span className="email-history-main"><strong>{item.subject}</strong><span>{item.sender ? `From ${item.sender.name} · ` : ''}{item.recipients.length} recipient{item.recipients.length === 1 ? '' : 's'} · {formatDate(item.sentAt || item.createdAt)}</span></span><span className={`email-delivery-status ${item.status}`}>{item.status}</span></summary>
         <div className="email-history-detail"><p>{item.message}</p><strong>Recipients</strong><span>{item.recipients.map((person) => `${person.name} (${person.email}) · ${displayRole(person.role)}${person.department ? ` · ${person.department}` : ''}`).join('\n')}</span>{item.error && <p className="form-error">{item.error}</p>}</div>
       </details>)}</div> : <p className="email-empty">No email activity yet.</p>}
+      <Pagination pagination={historyPagination} onPageChange={setHistoryPage} disabled={loading} />
     </section>
   </main>
 }

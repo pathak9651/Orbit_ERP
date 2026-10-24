@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Footer from '../layout/Footer.jsx'
 import { createInvoice, downloadInvoicePdf, emailInvoice as sendInvoiceEmail, getInvoices, updateInvoiceStatus } from '../../services/api.js'
+import Pagination from '../common/Pagination.jsx'
 import './BillingPage.css'
 
 // These status transitions mirror the server's invoice lifecycle rules.
@@ -36,6 +37,9 @@ function emptyForm() {
 /** Lists invoices and supports creation, status changes, PDF download, and email. */
 export default function BillingPage({ user }) {
   const [invoices, setInvoices] = useState([])
+  const [pagination, setPagination] = useState(null)
+  const [page, setPage] = useState(1)
+  const [serverSummary, setServerSummary] = useState({ paid: 0, outstanding: 0, overdue: 0 })
   const [form, setForm] = useState(emptyForm)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -50,25 +54,20 @@ export default function BillingPage({ user }) {
   const load = useCallback(async () => {
     setError('')
     try {
-      const result = await getInvoices()
+      const result = await getInvoices({ page, search: search.trim(), status: statusFilter })
       setInvoices(result.invoices || [])
+      setPagination(result.pagination)
+      setServerSummary(result.summary || { paid: 0, outstanding: 0, overdue: 0 })
     } catch (requestError) { setError(requestError.message) }
     finally { setLoading(false) }
-  }, [])
+  }, [page, search, statusFilter])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    const timer = window.setTimeout(load, 250)
+    return () => window.clearTimeout(timer)
+  }, [load])
 
-  const filtered = useMemo(() => {
-    const query = search.trim().toLowerCase()
-    return invoices.filter((invoice) => (statusFilter === 'all' || invoice.status === statusFilter)
-      && (!query || `${invoice.invoiceNumber} ${invoice.customerName} ${invoice.customerEmail}`.toLowerCase().includes(query)))
-  }, [invoices, search, statusFilter])
-  const totals = useMemo(() => invoices.reduce((summary, invoice) => {
-    if (invoice.status === 'paid') summary.paid += invoice.total
-    if (['sent', 'overdue'].includes(invoice.status)) summary.outstanding += invoice.total
-    if (invoice.status === 'overdue') summary.overdue += 1
-    return summary
-  }, { paid: 0, outstanding: 0, overdue: 0 }), [invoices])
+  const totals = serverSummary
   const estimate = useMemo(() => Math.round(form.items.reduce((sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0), 0) * 100) / 100, [form.items])
 
   function updateItem(index, field, value) {
@@ -150,11 +149,12 @@ export default function BillingPage({ user }) {
       </form>
     </section>
 
-    <section className="panel-card billing-list-card"><div className="section-heading"><div><h2>Invoice register</h2><p>{filtered.length} of {invoices.length} invoices</p></div><button className="text-button" type="button" onClick={load}>Refresh</button></div>
-      <div className="billing-filters"><label className="field-label">Search<input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Invoice number or customer" /></label><label className="field-label">Status<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">All statuses</option>{Object.entries(statusLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label></div>
-      {loading ? <p className="user-table-state">Loading invoices…</p> : filtered.length ? <div className="attendance-table-wrap"><table className="work-table billing-table"><thead><tr><th>Invoice</th><th>Customer</th><th>Due date</th><th>Total</th><th>Status</th><th>Created by</th><th>Update</th></tr></thead><tbody>{filtered.map((invoice) => <tr key={invoice.id}>
+    <section className="panel-card billing-list-card"><div className="section-heading"><div><h2>Invoice register</h2><p>{pagination?.totalItems ?? invoices.length} invoices</p></div><button className="text-button" type="button" onClick={load}>Refresh</button></div>
+      <div className="billing-filters"><label className="field-label">Search<input type="search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1) }} placeholder="Invoice number or customer" /></label><label className="field-label">Status<select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setPage(1) }}><option value="all">All statuses</option>{Object.entries(statusLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label></div>
+      {loading ? <p className="user-table-state">Loading invoices…</p> : invoices.length ? <div className="attendance-table-wrap"><table className="work-table billing-table"><thead><tr><th>Invoice</th><th>Customer</th><th>Due date</th><th>Total</th><th>Status</th><th>Created by</th><th>Update</th></tr></thead><tbody>{invoices.map((invoice) => <tr key={invoice.id}>
         <td><details className="billing-invoice-details"><summary><strong>{invoice.invoiceNumber}</strong></summary><div className="billing-invoice-popover"><strong>{invoice.customerName}</strong>{invoice.items.map((item, index) => <span key={`${item.description}-${index}`}>{item.description} · {item.quantity} × {currency.format(item.unitPrice)} = {currency.format(item.lineTotal)}</span>)}{invoice.notes && <p>{invoice.notes}</p>}<small>Status history</small>{invoice.statusHistory.map((entry, index) => <span key={`${entry.status}-${index}`}>{statusLabels[entry.status]} · {entry.actorName || 'User'} · {formatDate(entry.changedAt)}</span>)}</div></details><small>{formatDate(invoice.createdAt)}</small><button className="billing-download-button" type="button" onClick={() => download(invoice)} disabled={busyDownload === invoice.id}>{busyDownload === invoice.id ? 'Preparing PDF…' : 'Download PDF'}</button></td><td><strong>{invoice.customerName}</strong><small>{invoice.customerEmail || 'No email provided'}</small></td><td>{formatDate(invoice.dueDate)}</td><td><strong>{currency.format(invoice.total)}</strong></td><td><span className={`billing-status status-${invoice.status}`}>{statusLabels[invoice.status]}</span><small className={`billing-email-status ${invoice.emailStatus}`}>{invoice.emailStatus === 'sent' ? 'Email sent' : invoice.emailStatus === 'failed' ? 'Email failed' : invoice.emailStatus === 'pending' ? 'Email pending' : 'Not emailed'}</small></td><td>{invoice.createdBy?.name || 'Unknown'}</td><td className="billing-actions-cell">{invoice.customerEmail && ['sent', 'overdue'].includes(invoice.status) && <button className="billing-email-button" type="button" onClick={() => sendAgain(invoice)} disabled={busyEmail === invoice.id}>{busyEmail === invoice.id ? 'Sending…' : invoice.emailStatus === 'sent' ? 'Send again' : 'Email PDF'}</button>}{transitions[invoice.status]?.length ? <select className="billing-status-select" aria-label={`Update ${invoice.invoiceNumber} status`} value="" disabled={busyInvoice === invoice.id} onChange={(event) => changeStatus(invoice, event.target.value)}><option value="">Update…</option>{transitions[invoice.status].map((status) => <option value={status} key={status}>{statusLabels[status]}</option>)}</select> : <span className="billing-terminal-status">—</span>}</td>
-      </tr>)}</tbody></table></div> : <p className="user-table-state">{invoices.length ? 'No invoices match these filters.' : 'No invoices yet. Create one above to start the register.'}</p>}
+      </tr>)}</tbody></table></div> : <p className="user-table-state">{search || statusFilter !== 'all' ? 'No invoices match these filters.' : 'No invoices yet. Create one above to start the register.'}</p>}
+      <Pagination pagination={pagination} onPageChange={setPage} disabled={loading} />
     </section>
   </main><Footer /></section>
 }

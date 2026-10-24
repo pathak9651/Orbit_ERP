@@ -2,6 +2,7 @@ import mongoose from 'mongoose'
 import LeaveRequest from '../models/leaveRequest.js'
 import User from '../models/user.js'
 import { notifyUsers } from '../services/notifications.js'
+import { getPaginationOptions, paginateQuery } from '../utils/pagination.js'
 
 // Validate calendar-day strings before persisting them so timezone shifts cannot alter leave dates.
 const validDateKey = (value) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00.000Z`)) && new Date(`${value}T00:00:00.000Z`).toISOString().slice(0, 10) === value
@@ -25,16 +26,19 @@ export async function listLeaveRequests(req, res, next) {
   try {
     const ownFilter = { requester: req.user._id }
     const queueFilter = { status: 'pending', currentStage: req.user.role, requester: { $ne: req.user._id } }
+    const mineOptions = getPaginationOptions({ ...req.query, page: req.query.requestsPage || req.query.page })
     if (req.user.role === 'manager') {
       queueFilter.department = req.user.department?._id || req.user.department || null
     } else if (!['hr', 'admin'].includes(req.user.role)) {
-      return res.json({ requests: await populateLeave(LeaveRequest.find(ownFilter).sort({ createdAt: -1 })) })
+      const mine = await paginateQuery(populateLeave(LeaveRequest.find(ownFilter).sort({ createdAt: -1 })), LeaveRequest.countDocuments(ownFilter), mineOptions)
+      return res.json({ requests: mine.items, requestsPagination: mine.pagination })
     }
+    const queueOptions = getPaginationOptions({ ...req.query, page: req.query.queuePage || req.query.page })
     const [mine, queue] = await Promise.all([
-      populateLeave(LeaveRequest.find(ownFilter).sort({ createdAt: -1 })),
-      populateLeave(LeaveRequest.find(queueFilter).sort({ createdAt: 1 })),
+      paginateQuery(populateLeave(LeaveRequest.find(ownFilter).sort({ createdAt: -1 })), LeaveRequest.countDocuments(ownFilter), mineOptions),
+      paginateQuery(populateLeave(LeaveRequest.find(queueFilter).sort({ createdAt: 1 })), LeaveRequest.countDocuments(queueFilter), queueOptions),
     ])
-    return res.json({ requests: mine, queue })
+    return res.json({ requests: mine.items, requestsPagination: mine.pagination, queue: queue.items, queuePagination: queue.pagination })
   } catch (error) { return next(error) }
 }
 
@@ -155,11 +159,12 @@ export async function listAdminApprovedLeaves(req, res, next) {
     const lastDay = new Date(`${monthStart}T00:00:00.000Z`)
     lastDay.setUTCMonth(lastDay.getUTCMonth() + 1, 0)
     const monthEnd = lastDay.toISOString().slice(0, 10)
-    const records = await populateLeave(LeaveRequest.find({
+    const filter = {
       status: 'approved',
       startDate: { $lte: monthEnd },
       endDate: { $gte: monthStart },
-    }).sort({ startDate: 1, createdAt: 1 }))
-    return res.json({ month, records })
+    }
+    const page = await paginateQuery(populateLeave(LeaveRequest.find(filter).sort({ startDate: 1, createdAt: 1 })), LeaveRequest.countDocuments(filter), getPaginationOptions(req.query))
+    return res.json({ month, records: page.items, pagination: page.pagination })
   } catch (error) { return next(error) }
 }

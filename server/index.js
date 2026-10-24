@@ -1,6 +1,8 @@
 import 'dotenv/config';
 import app from './app.js';
 import { connectDB } from './configs/db.js';
+import { closeRateLimitStore, connectRateLimitStore } from './services/rateLimiter.js';
+import { scheduleAttendanceLocationRetention, validateAttendanceLocationConfiguration } from './services/attendanceLocation.js';
 
 const PORT = Number(process.env.PORT) || 8000;
 
@@ -10,9 +12,22 @@ async function startServer() {
     throw new Error('Set JWT_SECRET in server/.env to a random value of at least 32 characters.');
   }
 
+  validateAttendanceLocationConfiguration();
   await connectDB(process.env.MONGODB_URI || 'mongodb://localhost:27017/orbit-erp');
   console.log('MongoDB connected');
-  app.listen(PORT, () => console.log(`Server listening at http://localhost:${PORT}`));
+  await connectRateLimitStore();
+  await scheduleAttendanceLocationRetention();
+  const server = app.listen(PORT, () => console.log(`Server listening at http://localhost:${PORT}`));
+
+  // Stop accepting requests before closing shared connections on process shutdown.
+  for (const signal of ['SIGINT', 'SIGTERM']) {
+    process.on(signal, () => {
+      server.close(async () => {
+        await closeRateLimitStore();
+        process.exit(0);
+      });
+    });
+  }
 }
 
 startServer().catch((error) => {

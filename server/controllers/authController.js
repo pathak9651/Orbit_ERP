@@ -1,4 +1,5 @@
 import User from '../models/user.js';
+import { recordAuditEvent } from '../services/audit.js';
 import { notifyUsers } from '../services/notifications.js';
 import Role from '../models/role.js';
 import {
@@ -6,8 +7,15 @@ import {
   createAccessToken,
   hashPassword,
   setAuthCookie,
+  TOKEN_COOKIE,
+  verifyAccessToken,
   verifyUserPassword,
 } from '../services/auth.js';
+
+async function recordAuthAudit(req, event) {
+  try { await recordAuditEvent(req, event); }
+  catch (error) { console.error('Security audit write failed:', error.message); }
+}
 
 /** Removes private fields and adds role and department labels for API responses. */
 async function toPublicUser(user) {
@@ -74,12 +82,15 @@ export async function signIn(req, res, next) {
   try {
     const user = await User.findOne({ email }).select('+password').populate('department', 'name');
     if (!user || !(await verifyUserPassword(user, password))) {
+      await recordAuthAudit(req, { eventType: 'login', outcome: 'failure', targetUser: user?._id || null });
       return res.status(401).json({ message: 'Invalid email or password.' });
     }
     if (user.isVerified === false) {
+      await recordAuthAudit(req, { eventType: 'login', outcome: 'failure', targetUser: user._id, details: { reason: 'unverified' } });
       return res.status(403).json({ message: 'Your account is awaiting administrator verification.' });
     }
     setAuthCookie(res, createAccessToken(user));
+    await recordAuthAudit(req, { eventType: 'login', targetUser: user._id });
     return res.json({ user: await toPublicUser(user) });
   } catch (error) {
     return next(error);
@@ -149,16 +160,44 @@ export async function changePassword(req, res, next) {
     }
 
     user.password = await hashPassword(newPassword);
+    user.tokenVersion = (user.tokenVersion ?? 0) + 1;
     await user.save();
     setAuthCookie(res, createAccessToken(user));
+    await recordAuthAudit(req, { eventType: 'password_changed', targetUser: user._id });
+    await recordAuthAudit(req, { eventType: 'session_revoked', targetUser: user._id, details: { reason: 'password_changed' } });
     return res.json({ user: await toPublicUser(user), message: 'Password updated successfully.' });
   } catch (error) {
     return next(error);
   }
 }
 
-/** Clears the browser's authentication cookie to end the session. */
-export function signOut(req, res) {
+/** Revokes all of this user's JWTs before clearing the current browser cookie. */
+export async function signOut(req, res, next) {
+  const authorization = req.get('authorization');
+  const bearer = authorization?.startsWith('Bearer ') ? authorization.slice(7) : null;
+  const token = req.cookies?.[TOKEN_COOKIE] || bearer;
+  let payload = null;
+
+  if (token) {
+    try {
+      payload = verifyAccessToken(token);
+    } catch (error) {
+      if (error.name !== 'JsonWebTokenError' && error.name !== 'TokenExpiredError') {
+        return next(error);
+      }
+    }
+  }
+
+  try {
+    // Only a signed token can identify the account whose outstanding sessions are revoked.
+    if (payload?.sub) {
+      await User.updateOne({ _id: payload.sub }, { $inc: { tokenVersion: 1 } });
+      await recordAuthAudit(req, { eventType: 'session_revoked', targetUser: payload.sub });
+    }
+  } catch (error) {
+    clearAuthCookie(res);
+    return next(error);
+  }
   clearAuthCookie(res);
   return res.status(204).end();
 }

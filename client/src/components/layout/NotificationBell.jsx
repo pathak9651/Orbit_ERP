@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import Pagination from '../common/Pagination.jsx'
 import './NotificationBell.css'
 
 /** Turns a notification timestamp into a short, readable relative time. */
@@ -13,7 +14,7 @@ function timeAgo(value) {
 }
 
 /** Displays the notification menu and highlights unread activity. */
-export default function NotificationBell({ notifications, unreadCount, onOpen, onMarkAll }) {
+export default function NotificationBell({ notifications, unreadCount, pagination, onPageChange, onOpen, onMarkAll }) {
   const [isOpen, setIsOpen] = useState(false)
 
   function openNotification(notification) {
@@ -35,6 +36,7 @@ export default function NotificationBell({ notifications, unreadCount, onOpen, o
           {!notification.readAt && <span className="notification-unread-dot" aria-label="Unread" />}
         </button>) : <p className="notification-empty">No notifications yet. Updates about your work will appear here.</p>}
       </div>
+      <Pagination pagination={pagination} onPageChange={onPageChange} />
     </section>}
   </div>
 }

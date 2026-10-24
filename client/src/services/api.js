@@ -1,5 +1,47 @@
+import { validateClientForm } from './validation.js'
+
+/** Finds the matching reusable client validation schema for a mutation route. */
+function requestValidationSchema(path, method) {
+  const route = path.split('?')[0]
+  const exactRoutes = {
+    'POST /api/login': 'login', 'POST /api/signup': 'signup',
+    'POST /api/forgot-password': 'forgotPassword', 'POST /api/reset-password': 'resetPassword',
+    'PATCH /api/profile': 'profile', 'PATCH /api/profile/password': 'password',
+    'POST /api/mail/send': 'email', 'POST /api/billing/invoices': 'invoice',
+    'POST /api/tasks': 'task', 'POST /api/leaves': 'leave',
+    'POST /api/attendance/check-in': 'checkIn', 'PATCH /api/attendance/location': 'location',
+    'POST /api/attendance/location-correction': 'locationCorrection',
+    'PATCH /api/attendance/location-review': 'locationReview',
+    'POST /api/admin/users': 'adminUser', 'POST /api/admin/users/import': 'userImport',
+    'POST /api/admin/users/import/google-sheet': 'googleSheet',
+    'POST /api/admin/roles': 'organizationRole', 'POST /api/admin/departments': 'organizationDepartment',
+  }
+  const routeKey = `${method.toUpperCase()} ${route}`
+  if (exactRoutes[routeKey]) return exactRoutes[routeKey]
+  if (method.toUpperCase() === 'PATCH' && /^\/api\/admin\/users\/[^/]+$/.test(route)) return 'adminUserUpdate'
+  if (method.toUpperCase() === 'PATCH' && /^\/api\/tasks\/[^/]+\/status$/.test(route)) return 'taskStatus'
+  if (method.toUpperCase() === 'PATCH' && /^\/api\/leaves\/[^/]+\/action$/.test(route)) return 'leaveAction'
+  if (method.toUpperCase() === 'PATCH' && /^\/api\/billing\/invoices\/[^/]+\/status$/.test(route)) return 'invoiceStatus'
+  if (method.toUpperCase() === 'POST' && /^\/api\/attendance\/[^/]+\/location-correction$/.test(route)) return 'locationCorrection'
+  if (method.toUpperCase() === 'PATCH' && /^\/api\/attendance\/[^/]+\/location-review$/.test(route)) return 'locationReview'
+  return ''
+}
+
 /** Central API client: sends cookie-authenticated requests and reports server errors consistently. */
 async function request(path, options = {}) {
+  const method = options.method || 'GET'
+  const schemaName = requestValidationSchema(path, method)
+  if (schemaName) {
+    let payload
+    try { payload = JSON.parse(options.body || 'null') }
+    catch { throw new Error('The form data could not be prepared. Please review it and try again.') }
+    const validationMessage = validateClientForm(schemaName, payload)
+    if (validationMessage) {
+      const error = new Error(validationMessage)
+      error.status = 400
+      throw error
+    }
+  }
   const response = await fetch(path, {
     credentials: 'include',
     ...options,
@@ -16,14 +58,24 @@ async function request(path, options = {}) {
   return result
 }
 
+/** Adds optional server-side list filters without including empty values. */
+function withQuery(path, parameters = {}) {
+  const query = new URLSearchParams()
+  Object.entries(parameters).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') query.set(key, String(value))
+  })
+  const queryString = query.toString()
+  return queryString ? `${path}?${queryString}` : path
+}
+
 /** Loads the signed-in user from the HTTP-only session cookie. */
 export function getCurrentUser() {
   return request('/api/me')
 }
 
 /** Loads the current user's notification feed and unread count. */
-export function getNotifications() {
-  return request('/api/notifications')
+export function getNotifications(parameters) {
+  return request(withQuery('/api/notifications', parameters))
 }
 
 /** Marks one notification as read through the authenticated API. */
@@ -37,17 +89,17 @@ export function markAllNotificationsRead() {
 }
 
 /** Fetches verified people available in the workspace email directory. */
-export function getEmailDirectory() {
-  return request('/api/mail/directory')
+export function getEmailDirectory(parameters) {
+  return request(withQuery('/api/mail/directory', parameters))
 }
 
-export function getSentEmails() {
-  return request('/api/mail/sent')
+export function getSentEmails(parameters) {
+  return request(withQuery('/api/mail/sent', parameters))
 }
 
 /** Fetches invoices the current account is allowed to manage. */
-export function getInvoices() {
-  return request('/api/billing/invoices')
+export function getInvoices(parameters) {
+  return request(withQuery('/api/billing/invoices', parameters))
 }
 
 export function createInvoice(details) {
@@ -95,6 +147,15 @@ export function signIn(credentials) {
   })
 }
 
+export function requestPasswordReset(email) {
+  return request('/api/forgot-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) })
+}
+
+export function resetPassword(details) {
+  return request('/api/reset-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(details) })
+}
+
+
 /** Submits a registration request for administrator verification. */
 export function signUp(details) {
   return request('/api/signup', {
@@ -125,8 +186,56 @@ export function updatePassword(details) {
   })
 }
 
-export function getAdminUsers() {
-  return request('/api/admin/users')
+export function getAdminUsers(parameters) {
+  return request(withQuery('/api/admin/users', parameters))
+}
+
+/** Loads the read-only, paginated audit feed available to administrators. */
+export function getAuditEvents(parameters) { return request(withQuery('/api/admin/audit-events', parameters)) }
+
+/** Creates an account through the administrator-only user management API. */
+export function createAdminUser(details) {
+  return request('/api/admin/users', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(details),
+  })
+}
+
+/** Sends spreadsheet rows to the admin-only bulk user import endpoint. */
+export function importAdminUsers(users) {
+  return request('/api/admin/users/import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ users }),
+  })
+}
+
+/** Imports rows from a publicly viewable Google Sheet link. */
+export function importAdminUsersFromGoogleSheet(sheetUrl) {
+  return request('/api/admin/users/import/google-sheet', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sheetUrl }),
+  })
+}
+
+/** Downloads the complete administrator CSV export using the signed-in session cookie. */
+export async function downloadAdminDataCsv() {
+  const response = await fetch('/api/admin/export.csv', { credentials: 'include' })
+  if (!response.ok) {
+    const result = await response.json().catch(() => ({}))
+    throw new Error(result.message || 'Could not export ERP data.')
+  }
+
+  const fileUrl = URL.createObjectURL(await response.blob())
+  const downloadLink = document.createElement('a')
+  downloadLink.href = fileUrl
+  downloadLink.download = `orbit-erp-export-${new Date().toISOString().slice(0, 10)}.csv`
+  document.body.appendChild(downloadLink)
+  downloadLink.click()
+  downloadLink.remove()
+  window.setTimeout(() => URL.revokeObjectURL(fileUrl), 1000)
 }
 
 export function updateAdminUser(id, updates) {
@@ -166,8 +275,8 @@ export function deleteAdminDepartment(id) {
 }
 
 
-export function getTasks() {
-  return request('/api/tasks')
+export function getTasks(parameters) {
+  return request(withQuery('/api/tasks', parameters))
 }
 
 export function getTaskAssignees() {
@@ -182,15 +291,19 @@ export function updateTaskStatus(id, status) {
   return request(`/api/tasks/${encodeURIComponent(id)}/status`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) })
 }
 
-export function getAttendance() {
-  return request('/api/attendance')
+export function getAttendance(parameters) {
+  return request(withQuery('/api/attendance', parameters))
 }
 
-export function checkIn(location) {
+export function getAttendanceLocationReviews(parameters) {
+  return request(withQuery('/api/attendance/location-reviews', parameters))
+}
+
+export function checkIn(location, exceptionReason = '') {
   return request('/api/attendance/check-in', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ location }),
+    body: JSON.stringify(location ? { location } : { exceptionReason }),
   })
 }
 
@@ -198,13 +311,12 @@ export function checkOut() {
   return request('/api/attendance/check-out', { method: 'POST' })
 }
 
-export function getAdminMonthlyAttendance(month) {
-  const query = month ? `?month=${encodeURIComponent(month)}` : ''
-  return request(`/api/admin/attendance/month${query}`)
+export function getAdminMonthlyAttendance(month, parameters = {}) {
+  return request(withQuery('/api/admin/attendance/month', { ...parameters, month }))
 }
 
-export function getLeaveRequests() {
-  return request('/api/leaves')
+export function getLeaveRequests(parameters) {
+  return request(withQuery('/api/leaves', parameters))
 }
 
 export function createLeaveRequest(details) {
@@ -215,8 +327,8 @@ export function actOnLeaveRequest(id, action, message) {
   return request(`/api/leaves/${encodeURIComponent(id)}/action`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, message }) })
 }
 
-export function getAdminApprovedLeaves(month) {
-  return request(`/api/admin/leaves/approved?month=${encodeURIComponent(month)}`)
+export function getAdminApprovedLeaves(month, parameters = {}) {
+  return request(withQuery('/api/admin/leaves/approved', { ...parameters, month }))
 }
 
 
@@ -225,5 +337,21 @@ export function updateAttendanceLocation(location) {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ location }),
+  })
+}
+
+export function requestAttendanceLocationCorrection(id, location, reason) {
+  return request(`/api/attendance/${encodeURIComponent(id)}/location-correction`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ location, reason }),
+  })
+}
+
+export function reviewAttendanceLocation(id, decision, message) {
+  return request(`/api/attendance/${encodeURIComponent(id)}/location-review`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ decision, message }),
   })
 }

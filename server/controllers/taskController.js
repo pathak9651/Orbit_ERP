@@ -3,6 +3,7 @@ import Role, { SYSTEM_ROLES } from '../models/role.js'
 import Task from '../models/task.js'
 import User from '../models/user.js'
 import { notifyUsers } from '../services/notifications.js'
+import { getPaginationOptions, paginateQuery } from '../utils/pagination.js'
 
 /** Resolves a role's hierarchy rank so assignment permissions stay data-driven. */
 async function roleLevel(roleKey) {
@@ -55,8 +56,12 @@ export async function listTasks(req, res, next) {
     } else {
       filter.$or = [{ assignedTo: req.user._id }, { assignedBy: req.user._id }]
     }
-    const tasks = await Task.find(filter).populate('assignedTo', 'name email role').populate('assignedBy', 'name email role').populate('department', 'name').sort({ createdAt: -1 }).lean()
-    return res.json({ tasks })
+    const taskPage = await paginateQuery(
+      Task.find(filter).populate('assignedTo', 'name email role').populate('assignedBy', 'name email role').populate('department', 'name').sort({ createdAt: -1 }).lean(),
+      Task.countDocuments(filter),
+      getPaginationOptions(req.query),
+    )
+    return res.json({ tasks: taskPage.items, pagination: taskPage.pagination })
   } catch (error) { return next(error) }
 }
 
