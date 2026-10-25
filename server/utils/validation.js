@@ -68,7 +68,73 @@ function checkPassword(body, field, label, errors, { required = true, min = 0 } 
   if (password && Buffer.byteLength(password, 'utf8') > 72) errors.push(`${label} must be no more than 72 bytes.`)
 }
 
-const validate = {
+/**
+ * Creates a shallow, allowlisted request validator for route-specific inputs.
+ * Keep this middleware before controllers so malformed values never reach a query.
+ */
+export function validate(spec, { source = 'body', rejectUnknown = true } = {}) {
+  if (!['body', 'query', 'params'].includes(source)) {
+    throw new TypeError(`Unsupported validation source: ${source}`)
+  }
+  if (!isObject(spec)) throw new TypeError('Validation spec must be an object.')
+
+  const fields = Object.entries(spec).map(([name, definition]) => [
+    name,
+    typeof definition === 'string' ? { type: definition } : definition,
+  ])
+
+  return (req, res, next) => {
+    const input = req[source]
+    const errors = []
+    if (!isObject(input)) {
+      return res.status(400).json({ message: `Request ${source} must be an object.` })
+    }
+
+    if (rejectUnknown) {
+      const allowed = new Set(fields.map(([name]) => name))
+      const unknownField = Object.keys(input).find((name) => !allowed.has(name))
+      if (unknownField) errors.push(`Unexpected ${source} field: ${unknownField}.`)
+    }
+
+    for (const [name, definition] of fields) {
+      const value = input[name]
+      const { type, required = false, enum: allowedValues, immutableForRoles } = definition || {}
+      if (value === undefined) {
+        if (required) errors.push(`${name} is required.`)
+        continue
+      }
+
+      const validType = type === 'string' ? typeof value === 'string'
+        : type === 'number' ? typeof value === 'number' && Number.isFinite(value)
+          : type === 'integer' ? (typeof value === 'number' && Number.isInteger(value)) || (typeof value === 'string' && /^\d+$/.test(value))
+            : type === 'boolean' ? typeof value === 'boolean'
+              : type === 'email' ? typeof value === 'string' && EMAIL_PATTERN.test(value)
+                : type === 'objectId' ? typeof value === 'string' && OBJECT_ID_PATTERN.test(value)
+                  : type === 'object' ? isObject(value)
+                    : type === 'array' ? Array.isArray(value)
+                      : false
+
+      if (!validType) {
+        errors.push(`${name} has an invalid value.`)
+        continue
+      }
+      if (Array.isArray(allowedValues) && !allowedValues.includes(value)) {
+        errors.push(`${name} has an unsupported value.`)
+      }
+      if (Array.isArray(immutableForRoles) && !immutableForRoles.includes(req.user?.role)) {
+        errors.push(`${name} cannot be changed for this account.`)
+      }
+    }
+
+    if (errors.length) {
+      const status = errors.some((message) => message.includes('cannot be changed')) ? 403 : 400
+      return res.status(status).json({ message: errors[0], errors })
+    }
+    return next()
+  }
+}
+
+const bodyValidators = {
   login(body, errors) {
     if (!checkObject(body, ['email', 'password'], errors)) return
     checkEmail(body, errors)
@@ -226,12 +292,12 @@ const validate = {
       checkString(body, 'exceptionReason', 'GPS exception reason', errors, { min: 3, max: 1000 })
       return
     }
-    validate.location({ location: body.location }, errors)
+    bodyValidators.location({ location: body.location }, errors)
     if (body.exceptionReason !== undefined) checkString(body, 'exceptionReason', 'GPS exception reason', errors, { required: false, max: 1000 })
   },
   locationCorrection(body, errors) {
     if (!checkObject(body, ['location', 'reason'], errors)) return
-    validate.location({ location: body.location }, errors)
+    bodyValidators.location({ location: body.location }, errors)
     checkString(body, 'reason', 'Correction reason', errors, { min: 3, max: 1000 })
   },
   locationReview(body, errors) {
@@ -243,7 +309,7 @@ const validate = {
 
 /** Returns validation messages for one named form/request schema. */
 export function validateRequestBody(schemaName, body) {
-  const validator = validate[schemaName]
+  const validator = bodyValidators[schemaName]
   if (!validator) throw new Error(`Unknown request validation schema: ${schemaName}`)
   const errors = []
   validator(body, errors)

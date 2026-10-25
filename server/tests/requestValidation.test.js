@@ -1,6 +1,51 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { validateRequestBody } from '../utils/validation.js'
+import { validate, validateRequestBody } from '../utils/validation.js'
+
+function runValidator(middleware, { value, source = 'body', role = 'employee' }) {
+  const result = { status: 200, body: null, next: false }
+  const req = { [source]: value, user: { role } }
+  const res = {
+    status(status) { result.status = status; return this },
+    json(body) { result.body = body; return this },
+  }
+  middleware(req, res, () => { result.next = true })
+  return result
+}
+
+test('declarative validation rejects unknown fields and accepts a declared body', () => {
+  const middleware = validate({ name: { type: 'string', required: true } })
+  assert.equal(runValidator(middleware, { value: { name: 'Ari', role: 'admin' } }).status, 400)
+  assert.equal(runValidator(middleware, { value: { name: 'Ari' } }).next, true)
+})
+
+test('declarative validation rejects values with the wrong declared type', () => {
+  const middleware = validate({ active: { type: 'boolean', required: true } })
+  assert.equal(runValidator(middleware, { value: { active: 'true' } }).status, 400)
+  assert.equal(runValidator(middleware, { value: { active: true } }).next, true)
+})
+
+test('declarative validation enforces required fields', () => {
+  const middleware = validate({ recordId: { type: 'objectId', required: true } })
+  assert.equal(runValidator(middleware, { value: {} }).status, 400)
+  assert.equal(runValidator(middleware, { value: { recordId: '64b000000000000000000001' } }).next, true)
+})
+
+test('declarative validation rejects unknown query fields', () => {
+  const middleware = validate({ page: 'integer' }, { source: 'query' })
+  assert.equal(runValidator(middleware, { source: 'query', value: { page: '2', filter: 'all' } }).status, 400)
+  assert.equal(runValidator(middleware, { source: 'query', value: { page: '2' } }).next, true)
+})
+
+test('immutable fields are rejected for non-admin users', () => {
+  const middleware = validate({ role: { type: 'string', immutableForRoles: ['admin'] } })
+  assert.equal(runValidator(middleware, { value: { role: 'manager' }, role: 'employee' }).status, 403)
+})
+
+test('immutable fields remain editable by explicitly permitted roles', () => {
+  const middleware = validate({ role: { type: 'string', immutableForRoles: ['admin'] } })
+  assert.equal(runValidator(middleware, { value: { role: 'manager' }, role: 'admin' }).next, true)
+})
 
 test('login validation accepts a valid email and password', () => {
   assert.deepEqual(validateRequestBody('login', { email: 'person@example.com', password: 'password' }), [])

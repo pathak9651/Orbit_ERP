@@ -32,6 +32,26 @@ test('signup rejects malformed fields before account storage is reached', async 
   assert.ok(result.errors.length >= 5)
 })
 
+test('login rejects unexpected fields before authentication logic runs', async () => {
+  const response = await fetch(`${baseUrl}/api/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'person@example.com', password: 'correct-password', role: 'admin' }),
+  })
+  const result = await response.json()
+  assert.equal(response.status, 400)
+  assert.match(result.message, /unexpected field/i)
+})
+
+test('signup rejects a wrong field type before account storage is reached', async () => {
+  const response = await fetch(`${baseUrl}/api/signup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: { $ne: '' }, phone: '+15551234567', email: 'person@example.com', dateOfBirth: '1995-06-12', password: 'correct-password' }),
+  })
+  assert.equal(response.status, 400)
+})
+
 test('malformed JSON receives a client error instead of a server error', async () => {
   const response = await fetch(`${baseUrl}/api/login`, {
     method: 'POST',
