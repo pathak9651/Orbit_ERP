@@ -2,7 +2,7 @@
 
 Use the reusable `validate(spec, { source })` middleware in `server/utils/validation.js` for route-specific body, query, or path-parameter contracts. The default is `source: 'body'` and `rejectUnknown: true`. A field can be a type name or an options object with `type`, `required`, `enum`, and `immutableForRoles`.
 
-The validator is deliberately shallow: it checks only declared top-level fields and compares the input keys with the declared keys. Keep nested business validation in the existing named body validators where nested arrays or objects need more detailed rules. Do not pass a request object or request-derived object directly into a Mongoose query.
+The validator is deliberately shallow: it checks only declared top-level fields and compares the input keys with the declared keys. Mutation routes attach a declarative shape and a named business schema through `validate(spec, { bodySchema })`; the same request-key scan is reused, while the named validator enforces password rules, date ranges, recipient IDs, and nested invoice/location structures. Do not pass a request object or request-derived object directly into a Mongoose query.
 
 ```js
 // Create body: require a name and email, and reject extra fields.
@@ -18,4 +18,4 @@ validate({ page: 'integer', search: 'string' }, { source: 'query' })
 validate({ id: { type: 'objectId', required: true } }, { source: 'params' })
 ```
 
-An `immutableForRoles` list names the roles allowed to change that field. Other roles receive HTTP 403. Type, required, enum, and unexpected-field failures receive HTTP 400. Existing `validateBody(schemaName)` validators remain on mutation routes for field-specific constraints such as password strength, date ranges, and nested invoice items.
+An `immutableForRoles` list names the roles allowed to change that field. Other roles receive HTTP 403. Type, required, enum, and unexpected-field failures receive HTTP 400. Every JSON mutation route declares a top-level field shape; `bodySchema` adds its field-specific constraints, including nested invoice items and GPS structures.

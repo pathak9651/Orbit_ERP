@@ -40,7 +40,7 @@ test('login rejects unexpected fields before authentication logic runs', async (
   })
   const result = await response.json()
   assert.equal(response.status, 400)
-  assert.match(result.message, /unexpected field/i)
+  assert.match(result.message, /unexpected body field/i)
 })
 
 test('signup rejects a wrong field type before account storage is reached', async () => {

@@ -2,6 +2,7 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 export const MAX_PROFILE_IMAGE_BYTES = 1_572_864
+const errorsWithoutRepeatedUnknownFieldScan = new WeakSet()
 
 /** Confirms an uploaded profile image is small and its declared type matches its binary signature. */
 export function validateProfileImageUpload(imageBuffer, contentType) {
@@ -35,8 +36,10 @@ function checkObject(body, allowedFields, errors) {
     errors.push('Send a JSON object with the requested form fields.')
     return false
   }
-  const unknownFields = Object.keys(body).filter((field) => !allowedFields.includes(field))
-  if (unknownFields.length) errors.push(`Unexpected field: ${unknownFields[0]}.`)
+  if (!errorsWithoutRepeatedUnknownFieldScan.has(errors)) {
+    const unknownFields = Object.keys(body).filter((field) => !allowedFields.includes(field))
+    if (unknownFields.length) errors.push(`Unexpected field: ${unknownFields[0]}.`)
+  }
   return true
 }
 
@@ -72,7 +75,7 @@ function checkPassword(body, field, label, errors, { required = true, min = 0 } 
  * Creates a shallow, allowlisted request validator for route-specific inputs.
  * Keep this middleware before controllers so malformed values never reach a query.
  */
-export function validate(spec, { source = 'body', rejectUnknown = true } = {}) {
+export function validate(spec, { source = 'body', rejectUnknown = true, bodySchema } = {}) {
   if (!['body', 'query', 'params'].includes(source)) {
     throw new TypeError(`Unsupported validation source: ${source}`)
   }
@@ -104,7 +107,7 @@ export function validate(spec, { source = 'body', rejectUnknown = true } = {}) {
         continue
       }
 
-      const validType = type === 'string' ? typeof value === 'string'
+      const validType = (value === null && definition?.nullable === true) || type === 'any' || (type === 'string' ? typeof value === 'string'
         : type === 'number' ? typeof value === 'number' && Number.isFinite(value)
           : type === 'integer' ? (typeof value === 'number' && Number.isInteger(value)) || (typeof value === 'string' && /^\d+$/.test(value))
             : type === 'boolean' ? typeof value === 'boolean'
@@ -112,7 +115,7 @@ export function validate(spec, { source = 'body', rejectUnknown = true } = {}) {
                 : type === 'objectId' ? typeof value === 'string' && OBJECT_ID_PATTERN.test(value)
                   : type === 'object' ? isObject(value)
                     : type === 'array' ? Array.isArray(value)
-                      : false
+                      : false)
 
       if (!validType) {
         errors.push(`${name} has an invalid value.`)
@@ -124,6 +127,11 @@ export function validate(spec, { source = 'body', rejectUnknown = true } = {}) {
       if (Array.isArray(immutableForRoles) && !immutableForRoles.includes(req.user?.role)) {
         errors.push(`${name} cannot be changed for this account.`)
       }
+    }
+
+    if (bodySchema && source === 'body') {
+      const businessErrors = validateRequestBody(bodySchema, input, { skipUnknown: true })
+      errors.push(...businessErrors)
     }
 
     if (errors.length) {
@@ -308,19 +316,12 @@ const bodyValidators = {
 }
 
 /** Returns validation messages for one named form/request schema. */
-export function validateRequestBody(schemaName, body) {
+export function validateRequestBody(schemaName, body, { skipUnknown = false } = {}) {
   const validator = bodyValidators[schemaName]
   if (!validator) throw new Error(`Unknown request validation schema: ${schemaName}`)
   const errors = []
+  if (skipUnknown) errorsWithoutRepeatedUnknownFieldScan.add(errors)
   validator(body, errors)
   return errors
 }
 
-/** Rejects malformed or unexpected request fields before a controller can use them. */
-export function validateBody(schemaName) {
-  return (req, res, next) => {
-    const errors = validateRequestBody(schemaName, req.body)
-    if (errors.length) return res.status(400).json({ message: errors[0], errors })
-    return next()
-  }
-}
