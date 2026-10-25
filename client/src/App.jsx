@@ -1,5 +1,5 @@
 /** Coordinates session state, role-based navigation, page rendering, and notification refreshes. */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import AuthScreen from './components/auth/AuthScreen.jsx'
 import HomePage from './components/dashboard/HomePage.jsx'
 import AdminOverviewPage from './components/dashboard/AdminOverviewPage.jsx'
@@ -12,13 +12,15 @@ import LeavePage from './components/dashboard/LeavePage.jsx'
 import EmailPage from './components/dashboard/EmailPage.jsx'
 import BillingPage from './components/dashboard/BillingPage.jsx'
 import AuditEventsPage from './components/dashboard/AuditEventsPage.jsx'
+import ChatPage from './components/dashboard/ChatPage.jsx'
 import ProfilePage from './components/profile/ProfilePage.jsx'
 import Navbar from './components/layout/Navbar.jsx'
 import HorizontalNavbar from './components/layout/HorizontalNavbar.jsx'
 import { canAccessBilling } from './services/permissions.js'
+import { shouldShowOffPageChatNotification } from './services/chat.js'
 import { getCurrentUser, getNotifications, markAllNotificationsRead, markNotificationRead, requestPasswordReset, resetPassword, signIn, signOut, signUp } from './services/api.js'
 
-const WORKSPACE_PAGES = new Set(['overview', 'users', 'tasks', 'attendance', 'leaves', 'email', 'housekeeping', 'billing', 'revenue', 'reports', 'audit', 'organization', 'profile'])
+const WORKSPACE_PAGES = new Set(['overview', 'users', 'tasks', 'attendance', 'leaves', 'email', 'chat', 'housekeeping', 'billing', 'revenue', 'reports', 'audit', 'organization', 'profile'])
 
 /** Restores a known workspace page from the browser URL, defaulting safely to Home. */
 function readWorkspacePageFromUrl() {
@@ -29,7 +31,7 @@ function readWorkspacePageFromUrl() {
 /** Prevents a manually entered URL from exposing a page outside the user's navigation. */
 function canOpenWorkspacePage(user, page) {
   if (user.role === 'admin') return true
-  return ['overview', 'profile', 'tasks', 'attendance', 'leaves', 'email'].includes(page)
+  return ['overview', 'profile', 'tasks', 'attendance', 'leaves', 'email', 'chat'].includes(page)
     || (page === 'billing' && canAccessBilling(user))
 }
 
@@ -47,6 +49,9 @@ export default function App() {
   const [unreadCount, setUnreadCount] = useState(0)
   const [notificationPagination, setNotificationPagination] = useState(null)
   const [notificationPage, setNotificationPage] = useState(1)
+  const [hasNewChatMessage, setHasNewChatMessage] = useState(false)
+  const currentPageRef = useRef(currentPage)
+  currentPageRef.current = currentPage
 
   useEffect(() => {
     const resetToken = new URLSearchParams(window.location.search).get('resetToken')
@@ -93,6 +98,45 @@ export default function App() {
 
   const isAuthenticated = Boolean(user)
 
+  // Keep the chat socket alive across workspace pages so off-page messages can alert the user.
+  useEffect(() => {
+    if (!isAuthenticated || isSigningOut || !user?.id) return undefined
+    let reconnectTimer
+    let disposed = false
+    let chatSocket
+
+    function connectToChat() {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+      const socket = new WebSocket(`${protocol}//${window.location.host}/api/chat/ws`)
+      chatSocket = socket
+      socket.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data)
+          if (payload.type !== 'chat:message') return
+          const isOffPageIncomingMessage = shouldShowOffPageChatNotification(currentPageRef.current, payload.message.sender?._id, user.id)
+          if (!isOffPageIncomingMessage && String(payload.message.sender?._id) === String(user.id)) return
+          if (isOffPageIncomingMessage) setHasNewChatMessage(true)
+          if (String(payload.message.sender?._id) === String(user.id)) return
+          socket.send(JSON.stringify({ type: 'chat:delivered', conversationId: payload.conversationId, messageId: payload.message._id }))
+        } catch { /* Ignore malformed events and keep the chat connection available. */ }
+      }
+      socket.onclose = () => {
+        if (!disposed) reconnectTimer = window.setTimeout(connectToChat, 2500)
+      }
+    }
+
+    connectToChat()
+    return () => {
+      disposed = true
+      window.clearTimeout(reconnectTimer)
+      chatSocket?.close()
+    }
+  }, [isAuthenticated, isSigningOut, user?.id])
+
+  useEffect(() => {
+    if (currentPage === 'chat') setHasNewChatMessage(false)
+  }, [currentPage])
+
   // Recheck the session periodically so disabled or expired accounts lose access promptly.
   useEffect(() => {
     if (!isAuthenticated || isSigningOut) return undefined
@@ -109,6 +153,7 @@ export default function App() {
         setUser(null)
         setNotifications([])
         setUnreadCount(0)
+        setHasNewChatMessage(false)
         setCurrentPage('overview')
         setAuthMode('login')
         setAuthError(error.message)
@@ -152,6 +197,7 @@ export default function App() {
         const result = await signIn(details)
         setNotifications([])
         setUnreadCount(0)
+        setHasNewChatMessage(false)
         setCurrentPage('overview')
         setUser(result.user)
       } else if (authMode === 'signup') {
@@ -185,6 +231,7 @@ export default function App() {
       setUser(null)
       setNotifications([])
       setUnreadCount(0)
+      setHasNewChatMessage(false)
       setCurrentPage('overview')
       setAuthMode('login')
     } catch (error) {
@@ -242,6 +289,8 @@ export default function App() {
         />
         {currentPage === 'tasks'
           ? <TaskPage user={user} />
+          : currentPage === 'chat'
+            ? <ChatPage user={user} />
           : currentPage === 'attendance'
             ? <AttendancePage user={user} />
           : currentPage === 'leaves'
@@ -264,6 +313,10 @@ export default function App() {
               ? <AdminModulePage section={currentPage} />
               : <HomePage user={user} message={authError} />}
       </div>
+      {hasNewChatMessage && currentPage !== 'chat' && <button className="floating-chat-notification" type="button" aria-label="New chat message. Open Team chat" title="New chat message" onClick={() => { setHasNewChatMessage(false); setCurrentPage('chat'); setAuthError('') }}>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H5l1.8-3.6A7.5 7.5 0 1 1 20 11.5Z" /><path d="M8.5 10h7M8.5 13h5" /></svg>
+        <span className="floating-chat-notification-dot" aria-hidden="true" />
+      </button>}
     </div>
   )
 }

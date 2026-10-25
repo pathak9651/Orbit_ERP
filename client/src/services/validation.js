@@ -144,6 +144,9 @@ const schemas = {
     (value) => textError(value.name, 'Department name', { min: 2, max: 60 }),
     (value) => typeof value.name === 'string' && !/[a-z0-9]/i.test(value.name) ? 'Department name must include a letter or number.' : '',
   ]),
+  chatDirect: makeSchema(['userId'], [(value) => typeof value.userId === 'string' && OBJECT_ID_PATTERN.test(value.userId) ? '' : 'Choose a valid colleague.']),
+  chatDepartment: makeSchema(['departmentId'], [(value) => typeof value.departmentId === 'string' && OBJECT_ID_PATTERN.test(value.departmentId) ? '' : 'Choose a valid department.']),
+  chatMessage: makeSchema(['body'], [(value) => textError(value.body, 'Message', { min: 1, max: 4000 })]),
   invoiceStatus: makeSchema(['status'], [(value) => ['draft', 'sent', 'paid', 'overdue', 'cancelled'].includes(value.status) ? '' : 'Choose a valid invoice status.']),
   location: makeSchema(['location'], [(value) => {
     const location = value.location

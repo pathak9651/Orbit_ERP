@@ -1,6 +1,6 @@
 import AuditEvent from '../models/auditEvent.js'
 
-const safeDetailKeys = new Set(['previousRole', 'newRole', 'previousVerified', 'newVerified', 'previousDepartment', 'newDepartment', 'invoiceNumber', 'status', 'reason'])
+const safeDetailKeys = new Set(['previousRole', 'newRole', 'previousVerified', 'newVerified', 'previousDepartment', 'newDepartment', 'invoiceNumber', 'status', 'reason', 'conversationId', 'conversationType'])
 
 /** Stores a minimal security event without credentials, tokens, or arbitrary request payloads. */
 export async function recordAuditEvent(req, { eventType, outcome = 'success', targetUser = null, details = {} }) {

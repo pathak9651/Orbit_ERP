@@ -25,6 +25,16 @@ test('validation rejects fields the endpoint does not accept', () => {
   assert.ok(errors.some((message) => message.includes('Unexpected field')))
 })
 
+test('chat requests validate messages and target identifiers', () => {
+  assert.deepEqual(validateRequestBody('chatDirect', { userId: '64b000000000000000000001' }), [])
+  assert.deepEqual(validateRequestBody('chatDepartment', { departmentId: '64b000000000000000000002' }), [])
+  assert.deepEqual(validateRequestBody('chatMessage', { body: 'Hello team' }), [])
+  assert.ok(validateRequestBody('chatDirect', { userId: 'bad-id' }).length)
+  assert.ok(validateRequestBody('chatDepartment', { departmentId: 'bad-id' }).length)
+  assert.ok(validateRequestBody('chatMessage', { body: '  ' }).length)
+  assert.ok(validateRequestBody('chatMessage', { body: 'x'.repeat(4001) }).length)
+})
+
 test('profile validation accepts editable phone and birth date and rejects malformed values', () => {
   const validProfile = { name: 'Jordan Lee', email: 'jordan@example.com', phone: '+1 (555) 123-4567', dateOfBirth: '1995-06-12' }
   assert.deepEqual(validateRequestBody('profile', validProfile), [])

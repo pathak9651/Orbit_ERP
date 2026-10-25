@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "nodemon index.js",
     "start": "node index.js",
-    "test": "node --test tests/requestValidation.test.js tests/requestValidation.integration.test.js tests/attendanceLocation.test.js tests/rateLimiter.test.js tests/sessionRevocation.test.js tests/passwordHashing.test.js tests/csrfProtection.test.js tests/securityHeaders.integration.test.js tests/passwordRecovery.integration.test.js tests/profileImage.test.js",
+    "test": "node --test tests/requestValidation.test.js tests/requestValidation.integration.test.js tests/attendanceLocation.test.js tests/rateLimiter.test.js tests/sessionRevocation.test.js tests/passwordHashing.test.js tests/csrfProtection.test.js tests/securityHeaders.integration.test.js tests/passwordRecovery.integration.test.js tests/profileImage.test.js tests/chatAccess.test.js tests/chatRealtime.integration.test.js tests/csv.test.js",
     "seed:admin": "node scripts/seedAdmin.js"
   },
   "keywords": [],
@@ -27,6 +27,7 @@
     "nodemon": "^3.1.14",
     "pdfkit": "^0.20.2",
     "rate-limit-redis": "^6.0.1",
-    "redis": "^6.3.0"
+    "redis": "^6.3.0",
+    "ws": "^8.22.0"
   }
 }

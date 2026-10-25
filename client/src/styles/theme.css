@@ -2683,3 +2683,27 @@ button:disabled {
 
 
 .avatar img { width: 100%; height: 100%; border-radius: inherit; object-fit: cover; }
+
+.floating-chat-notification {
+  position: fixed;
+  z-index: 35;
+  right: 24px;
+  bottom: 82px;
+  display: grid;
+  width: 54px;
+  height: 54px;
+  place-items: center;
+  border: 1px solid #72e5ff;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #153a4a, #0d2632);
+  color: #65ddff;
+  cursor: pointer;
+  box-shadow: 0 8px 24px #0009, 0 0 18px #45d7ff35;
+  animation: floating-chat-arrive 220ms ease-out;
+}
+.floating-chat-notification svg { width: 25px; height: 25px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.floating-chat-notification-dot { position: absolute; top: 1px; right: 1px; width: 13px; height: 13px; border: 2px solid #080c10; border-radius: 50%; background: #ff354f; box-shadow: 0 0 10px #ff354f9c; }
+.floating-chat-notification:focus-visible { outline: 3px solid #eafaff; outline-offset: 3px; }
+@keyframes floating-chat-arrive { from { opacity: 0; transform: translateY(8px) scale(.9); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@media (max-width: 720px) { .floating-chat-notification { right: 16px; bottom: 74px; width: 50px; height: 50px; } }
+@media (prefers-reduced-motion: reduce) { .floating-chat-notification { animation: none; } }

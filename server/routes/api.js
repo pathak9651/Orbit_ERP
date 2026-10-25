@@ -23,7 +23,8 @@ import { createInvoice, downloadInvoice, emailInvoice, listInvoices, updateInvoi
 import { authorizeBillingAccess } from '../middlewares/billingAccess.js';
 import { listAuditEvents, requestPasswordReset, resetPassword } from '../controllers/securityController.js';
 import { validateBody } from '../utils/validation.js';
-import { authenticatedApiRateLimiter, emailRateLimiter, exportRateLimiter, importRateLimiter, invoiceEmailRateLimiter, loginAccountRateLimiter, loginRateLimiter, organizationEmailRateLimiter, passwordChangeRateLimiter, passwordResetRequestRateLimiter, passwordResetSubmitRateLimiter, signupRateLimiter } from '../services/rateLimiter.js';
+import { exportChatConversationCsv, listChatContacts, listChatConversations, listChatDepartments, listChatMessages, markChatConversationRead, openDepartmentConversation, openDirectConversation, sendChatMessage } from '../controllers/chatController.js';
+import { authenticatedApiRateLimiter, chatMessageRateLimiter, emailRateLimiter, exportRateLimiter, importRateLimiter, invoiceEmailRateLimiter, loginAccountRateLimiter, loginRateLimiter, organizationEmailRateLimiter, passwordChangeRateLimiter, passwordResetRequestRateLimiter, passwordResetSubmitRateLimiter, signupRateLimiter } from '../services/rateLimiter.js';
 
 // Keep endpoint declarations in one place; middleware order defines the access policy.
 const router = express.Router();
@@ -35,6 +36,15 @@ router.post('/forgot-password', passwordResetRequestRateLimiter, validateBody('f
 router.post('/reset-password', passwordResetSubmitRateLimiter, validateBody('resetPassword'), resetPassword);
 router.get('/me', authenticateToken, authenticatedApiRateLimiter, getCurrentUser);
 router.get('/notifications', authenticateToken, authenticatedApiRateLimiter, listNotifications);
+router.get('/chat/conversations', authenticateToken, authenticatedApiRateLimiter, listChatConversations);
+router.get('/chat/contacts', authenticateToken, authenticatedApiRateLimiter, listChatContacts);
+router.get('/chat/departments', authenticateToken, authenticatedApiRateLimiter, listChatDepartments);
+router.post('/chat/direct', authenticateToken, authenticatedApiRateLimiter, validateBody('chatDirect'), openDirectConversation);
+router.post('/chat/department', authenticateToken, authenticatedApiRateLimiter, validateBody('chatDepartment'), openDepartmentConversation);
+router.get('/chat/conversations/:id/messages', authenticateToken, authenticatedApiRateLimiter, listChatMessages);
+router.get('/chat/conversations/:id/export.csv', authenticateToken, authenticatedApiRateLimiter, exportRateLimiter, exportChatConversationCsv);
+router.patch('/chat/conversations/:id/read', authenticateToken, authenticatedApiRateLimiter, markChatConversationRead);
+router.post('/chat/conversations/:id/messages', authenticateToken, authenticatedApiRateLimiter, chatMessageRateLimiter, validateBody('chatMessage'), sendChatMessage);
 router.patch('/notifications/read-all', authenticateToken, authenticatedApiRateLimiter, markAllNotificationsRead);
 router.patch('/notifications/:id/read', authenticateToken, authenticatedApiRateLimiter, markNotificationRead);
 router.get('/mail/directory', authenticateToken, authenticatedApiRateLimiter, listEmailDirectory);

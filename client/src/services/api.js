@@ -15,6 +15,7 @@ function requestValidationSchema(path, method) {
     'POST /api/admin/users': 'adminUser', 'POST /api/admin/users/import': 'userImport',
     'POST /api/admin/users/import/google-sheet': 'googleSheet',
     'POST /api/admin/roles': 'organizationRole', 'POST /api/admin/departments': 'organizationDepartment',
+    'POST /api/chat/direct': 'chatDirect', 'POST /api/chat/department': 'chatDepartment',
   }
   const routeKey = `${method.toUpperCase()} ${route}`
   if (exactRoutes[routeKey]) return exactRoutes[routeKey]
@@ -24,6 +25,7 @@ function requestValidationSchema(path, method) {
   if (method.toUpperCase() === 'PATCH' && /^\/api\/billing\/invoices\/[^/]+\/status$/.test(route)) return 'invoiceStatus'
   if (method.toUpperCase() === 'POST' && /^\/api\/attendance\/[^/]+\/location-correction$/.test(route)) return 'locationCorrection'
   if (method.toUpperCase() === 'PATCH' && /^\/api\/attendance\/[^/]+\/location-review$/.test(route)) return 'locationReview'
+  if (method.toUpperCase() === 'POST' && /^\/api\/chat\/conversations\/[^/]+\/messages$/.test(route)) return 'chatMessage'
   return ''
 }
 
@@ -81,6 +83,63 @@ export function getAdminOverview(parameters) {
 /** Loads the current user's notification feed and unread count. */
 export function getNotifications(parameters) {
   return request(withQuery('/api/notifications', parameters))
+}
+
+/** Loads the signed-in user's paginated chat list. */
+export function getChatConversations(parameters) {
+  return request(withQuery('/api/chat/conversations', parameters))
+}
+
+/** Searches the paginated directory of colleagues allowed by chat policy. */
+export function getChatContacts(parameters) {
+  return request(withQuery('/api/chat/contacts', parameters))
+}
+
+/** Loads the small department list used to open team rooms. */
+export function getChatDepartments() {
+  return request('/api/chat/departments')
+}
+
+/** Opens or creates a direct conversation with an authorized colleague. */
+export function openDirectChat(userId) {
+  return request('/api/chat/direct', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId }) })
+}
+
+/** Opens or creates a department team room. */
+export function openDepartmentChat(departmentId) {
+  return request('/api/chat/department', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ departmentId }) })
+}
+
+/** Loads an authorized conversation's paginated message history. */
+export function getChatMessages(conversationId, parameters) {
+  return request(withQuery(`/api/chat/conversations/${encodeURIComponent(conversationId)}/messages`, parameters))
+}
+
+/** Marks a conversation's incoming messages read and notifies other connected members. */
+export function markChatConversationRead(conversationId) {
+  return request(`/api/chat/conversations/${encodeURIComponent(conversationId)}/read`, { method: 'PATCH' })
+}
+
+/** Downloads the selected chat as a CSV using the existing cookie session. */
+export async function downloadChatConversationCsv(conversationId, conversationName = 'conversation') {
+  const response = await fetch(`/api/chat/conversations/${encodeURIComponent(conversationId)}/export.csv`, { credentials: 'include' })
+  if (!response.ok) {
+    const result = await response.json().catch(() => ({}))
+    throw new Error(result.message || 'Could not export this conversation.')
+  }
+  const fileUrl = URL.createObjectURL(await response.blob())
+  const downloadLink = document.createElement('a')
+  downloadLink.href = fileUrl
+  downloadLink.download = `orbit-chat-${conversationName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.csv`
+  document.body.appendChild(downloadLink)
+  downloadLink.click()
+  downloadLink.remove()
+  window.setTimeout(() => URL.revokeObjectURL(fileUrl), 1000)
+}
+
+/** Saves a message; the server broadcasts it to connected conversation members. */
+export function sendChatMessage(conversationId, body) {
+  return request(`/api/chat/conversations/${encodeURIComponent(conversationId)}/messages`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ body }) })
 }
 
 /** Marks one notification as read through the authenticated API. */

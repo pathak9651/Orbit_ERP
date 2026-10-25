@@ -83,6 +83,8 @@ export const passwordResetRequestRateLimiter = createRateLimiter({ name: 'passwo
 export const passwordResetSubmitRateLimiter = createRateLimiter({ name: 'password-reset-submit', windowMs: FIFTEEN_MINUTES, maxRequests: 10 })
 /** Applies an authenticated-user quota across ordinary protected API endpoints. */
 export const authenticatedApiRateLimiter = createRateLimiter({ name: 'api-user', windowMs: FIFTEEN_MINUTES, maxRequests: 1500, keyGenerator: (req) => String(req.user?._id || ipKeyGenerator(req.ip)) })
+/** Slows repetitive chat posting while allowing normal work conversations. */
+export const chatMessageRateLimiter = createRateLimiter({ name: 'chat-message', windowMs: 60 * 1000, maxRequests: 60, keyGenerator: (req) => String(req.user?._id || ipKeyGenerator(req.ip)), message: 'You are sending messages too quickly. Please wait a moment.' })
 /** Caps email delivery requests per sender account. */
 export const emailRateLimiter = createRateLimiter({ name: 'email-account', windowMs: ONE_HOUR, maxRequests: 20, keyGenerator: (req) => String(req.user?._id || ipKeyGenerator(req.ip)) })
 /** Enforces a shared organization-wide SMTP quota across mail and invoice delivery routes. */

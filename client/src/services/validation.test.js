@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { validateClientForm, validateProfileImageFile } from './validation.js'
+import { getChatMessageStatus, shouldShowOffPageChatNotification } from './chat.js'
 
 test('client profile image checks allow supported images and reject unsafe or oversized files', () => {
   assert.equal(validateProfileImageFile({ type: 'image/webp', size: 120_000 }), '')
@@ -43,4 +44,27 @@ test('client validates GPS accuracy and requires reasons for location correction
   assert.equal(validateClientForm('locationReview', { decision: 'approve-correction', message: 'Confirmed with the employee.' }), '')
   assert.equal(validateClientForm('checkIn', { exceptionReason: 'Location permission is unavailable.' }), '')
   assert.match(validateClientForm('checkIn', { exceptionReason: 'x' }), /GPS exception reason/)
+})
+
+test('client chat validation rejects empty messages and malformed recipient identifiers', () => {
+  assert.equal(validateClientForm('chatMessage', { body: 'Hello team' }), '')
+  assert.match(validateClientForm('chatMessage', { body: '   ' }), /Message is required/)
+  assert.match(validateClientForm('chatMessage', { body: 'x'.repeat(4001) }), /4000 characters/)
+  assert.equal(validateClientForm('chatDirect', { userId: '64b000000000000000000001' }), '')
+  assert.match(validateClientForm('chatDepartment', { departmentId: 'bad-id' }), /valid department/)
+})
+
+test('chat message ticks advance from sent to delivered to seen', () => {
+  const conversation = { participants: [{ id: 'sender' }, { id: 'recipient' }] }
+  const message = { sender: { _id: 'sender' }, deliveredTo: [], readBy: ['sender'] }
+  assert.equal(getChatMessageStatus(message, conversation, 'sender'), 'sent')
+  assert.equal(getChatMessageStatus({ ...message, deliveredTo: ['recipient'] }, conversation, 'sender'), 'delivered')
+  assert.equal(getChatMessageStatus({ ...message, deliveredTo: ['recipient'], readBy: ['sender', 'recipient'] }, conversation, 'sender'), 'seen')
+  assert.equal(getChatMessageStatus(message, conversation, 'recipient'), '')
+})
+
+test('floating chat alerts only appear for incoming messages while outside chat', () => {
+  assert.equal(shouldShowOffPageChatNotification('overview', 'colleague', 'current-user'), true)
+  assert.equal(shouldShowOffPageChatNotification('chat', 'colleague', 'current-user'), false)
+  assert.equal(shouldShowOffPageChatNotification('overview', 'current-user', 'current-user'), false)
 })

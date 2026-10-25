@@ -197,6 +197,18 @@ const validate = {
     if (!checkObject(body, ['name'], errors)) return
     checkString(body, 'name', 'Department name', errors, { min: 2, max: 60 })
   },
+  chatDirect(body, errors) {
+    if (!checkObject(body, ['userId'], errors)) return
+    if (typeof body.userId !== 'string' || !OBJECT_ID_PATTERN.test(body.userId)) errors.push('Choose a valid colleague.')
+  },
+  chatDepartment(body, errors) {
+    if (!checkObject(body, ['departmentId'], errors)) return
+    if (typeof body.departmentId !== 'string' || !OBJECT_ID_PATTERN.test(body.departmentId)) errors.push('Choose a valid department.')
+  },
+  chatMessage(body, errors) {
+    if (!checkObject(body, ['body'], errors)) return
+    checkString(body, 'body', 'Message', errors, { min: 1, max: 4000 })
+  },
   location(body, errors) {
     if (!checkObject(body, ['location'], errors)) return
     const location = body.location

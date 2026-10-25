@@ -9,6 +9,7 @@ const userNavigation = [
   { icon: 'AT', label: 'Attendance', page: 'attendance' },
   { icon: 'LV', label: 'Leave requests', page: 'leaves' },
   { icon: 'EM', label: 'Email', page: 'email' },
+  { icon: 'CH', label: 'Team chat', page: 'chat' },
   { icon: 'ME', label: 'Profile', page: 'profile' },
 ]
 
@@ -20,6 +21,7 @@ const adminNavigation = [
   { icon: 'AT', label: 'Attendance', page: 'attendance' },
   { icon: 'LV', label: 'Leave requests', page: 'leaves' },
   { icon: 'EM', label: 'Email', page: 'email' },
+  { icon: 'CH', label: 'Team chat', page: 'chat' },
   { icon: 'HK', label: 'Housekeeping', page: 'housekeeping' },
   { icon: 'BI', label: 'Bills and invoices', page: 'billing' },
   { icon: 'RV', label: 'Revenue', page: 'revenue' },

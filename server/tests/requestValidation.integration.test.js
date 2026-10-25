@@ -82,6 +82,17 @@ test('company overview is available only to an authenticated administrator', asy
   assert.equal(response.status, 401)
 })
 
+test('chat endpoints require an authenticated account before reading chat data', async () => {
+  for (const path of ['/api/chat/conversations', '/api/chat/contacts', '/api/chat/departments']) {
+    const response = await fetch(`${baseUrl}${path}`)
+    assert.equal(response.status, 401)
+  }
+  const readResponse = await fetch(`${baseUrl}/api/chat/conversations/64b000000000000000000001/read`, { method: 'PATCH', headers: { Origin: 'http://localhost:5173' } })
+  assert.equal(readResponse.status, 401)
+  const exportResponse = await fetch(`${baseUrl}/api/chat/conversations/64b000000000000000000001/export.csv`)
+  assert.equal(exportResponse.status, 401)
+})
+
 test('login endpoint throttles repeated invalid attempts by client address', async () => {
   let lastResponse
   for (let attempt = 0; attempt < 11; attempt += 1) {

@@ -9,13 +9,7 @@ import Role from '../models/role.js'
 import Task from '../models/task.js'
 import User from '../models/user.js'
 import { recordAuditEvent } from '../services/audit.js'
-
-/** Escapes one CSV cell and prevents spreadsheet formula execution on open. */
-function escapeCsvCell(value) {
-  const text = value == null ? '' : String(value)
-  const safeText = /^[\u0000-\u0020]*[=+\-@]/.test(text) ? `'${text}` : text
-  return `"${safeText.replaceAll('"', '""')}"`
-}
+import { escapeCsvCell, serializeCsvRow } from '../utils/csv.js'
 
 /** Serializes a MongoDB record's complete non-secret fields for the CSV details column. */
 function serializeRecordDetails(record) {
@@ -66,7 +60,7 @@ export async function exportAllDataCsv(req, res, next) {
 
     await recordAuditEvent(req, { eventType: 'data_exported', details: { reason: 'complete_csv_export' } })
 
-    const csv = rows.map((row) => row.map(escapeCsvCell).join(',')).join('\r\n')
+    const csv = rows.map(serializeCsvRow).join('')
     const dateStamp = new Date().toISOString().slice(0, 10)
     res.setHeader('Cache-Control', 'no-store')
     res.type('text/csv; charset=utf-8')
