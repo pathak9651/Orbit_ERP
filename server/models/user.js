@@ -51,6 +51,19 @@ const userSchema = new mongoose.Schema({
         type: Boolean,
         default: true
     },
+    // Counts consecutive incorrect login passwords and blocks authentication temporarily after repeated failures.
+    failedLoginAttempts: {
+        type: Number,
+        default: 0,
+        min: 0,
+        select: false
+    },
+    // Expiry of the temporary account-level login cooldown, if one is active.
+    loginCooldownUntil: {
+        type: Date,
+        default: null,
+        select: false
+    },
     // Changes whenever existing sessions must be invalidated for this account.
     tokenVersion: {
         type: Number,

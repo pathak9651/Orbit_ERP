@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import Footer from '../layout/Footer.jsx'
 import { createTask, getTaskAssignees, getTasks, updateTaskStatus } from '../../services/api.js'
 import Pagination from '../common/Pagination.jsx'
+import LoadingState from '../common/LoadingState.jsx'
 
 const statusLabels = { pending: 'Pending', 'in-progress': 'In progress', completed: 'Completed' }
 const formatDate = (value) => value ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(value)) : 'No due date'
@@ -66,7 +67,7 @@ export default function TaskPage({ user }) {
       </form>
     </section>}
     <section className="panel-card work-list-card"><div className="section-heading"><div><h2>{canAssign ? 'Tasks' : 'Assigned to me'}</h2><p>{pagination?.totalItems ?? tasks.length} {pagination?.totalItems === 1 ? 'task' : 'tasks'}</p></div><button className="text-button" type="button" onClick={load}>Refresh</button></div>
-      {loading ? <p className="user-table-state">Loading tasks…</p> : tasks.length === 0 ? <p className="user-table-state">No tasks to show yet.</p> : <div className="work-list">{tasks.map((task) => <article className="work-item" key={task._id}>
+      {loading ? <LoadingState label="Loading tasks" /> : tasks.length === 0 ? <p className="user-table-state">No tasks to show yet.</p> : <div className="work-list">{tasks.map((task) => <article className="work-item" key={task._id}>
         <div className="work-item-main"><div className="work-item-title"><h3>{task.title}</h3><span className={`task-status status-${task.status}`}>{statusLabels[task.status]}</span></div>
           {task.description && <p>{task.description}</p>}<div className="work-meta"><span>Assigned to {task.assignedTo?.name || 'Unknown'}</span><span>By {task.assignedBy?.name || 'Unknown'}</span><span>{task.department?.name || 'No department'}</span><span>Due {formatDate(task.dueDate)}</span></div></div>
         {(String(task.assignedTo?._id) === String(user.id) || String(task.assignedBy?._id) === String(user.id) || ['admin', 'hr'].includes(user.role)) && <label className="field-label task-status-select"><span className="sr-only">Update status</span><select value={task.status} onChange={(e) => setStatus(task, e.target.value)}><option value="pending">Pending</option><option value="in-progress">In progress</option><option value="completed">Completed</option></select></label>}

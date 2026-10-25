@@ -1,13 +1,24 @@
+import { useEffect, useState } from 'react'
 import PasswordInput from '../shared/PasswordInput.jsx'
 import orbitLogo from '../../assets/orbit-logo.svg'
 
 /** Presents the shared sign-in and account-request form. */
-export default function AuthScreen({ mode, onModeChange, onSubmit, error, notice, busy, resetToken }) {
+export default function AuthScreen({ mode, onModeChange, onSubmit, error, notice, busy, resetToken, loginCooldownUntil = 0 }) {
+  const [currentTime, setCurrentTime] = useState(Date.now())
   const isSignUp = mode === 'signup'
   const isForgot = mode === 'forgot'
   const isReset = mode === 'reset'
   const isRecovery = isForgot || isReset
+  const cooldownSeconds = mode === 'login' ? Math.max(0, Math.ceil((loginCooldownUntil - currentTime) / 1000)) : 0
+  const cooldownLabel = `${Math.floor(cooldownSeconds / 60).toString().padStart(2, '0')}:${(cooldownSeconds % 60).toString().padStart(2, '0')}`
   const title = isSignUp ? 'Create your account' : isForgot ? 'Reset your password' : isReset ? 'Choose a new password' : 'Sign in to Orbit'
+
+  useEffect(() => {
+    if (!loginCooldownUntil || mode !== 'login') return undefined
+    setCurrentTime(Date.now())
+    const timer = window.setInterval(() => setCurrentTime(Date.now()), 250)
+    return () => window.clearInterval(timer)
+  }, [loginCooldownUntil, mode])
 
   return (
     <main className="auth-layout">
@@ -54,9 +65,10 @@ export default function AuthScreen({ mode, onModeChange, onSubmit, error, notice
             {isReset && <><input type="hidden" name="token" value={resetToken || ''} /><label className="field-label">New password<PasswordInput name="newPassword" autoComplete="new-password" minLength="8" maxLength="72" required /></label><label className="field-label">Confirm new password<PasswordInput name="confirmPassword" autoComplete="new-password" minLength="8" maxLength="72" required /></label></>}
 
             {error && <p className="form-error" role="alert">{error}</p>}
+            {cooldownSeconds > 0 && <p className="auth-cooldown" role="status">You can try signing in again in <strong>{cooldownLabel}</strong>.</p>}
             {notice && <p className="auth-notice" role="status">{notice}</p>}
-            <button className="button button-primary auth-submit" type="submit" disabled={busy}>
-              {busy ? 'Please wait' : isSignUp ? 'Create account' : isForgot ? 'Send reset instructions' : isReset ? 'Reset password' : 'Sign in'}
+            <button className="button button-primary auth-submit" type="submit" disabled={busy || cooldownSeconds > 0}>
+              {busy ? 'Please wait' : cooldownSeconds > 0 ? `Try again in ${cooldownLabel}` : isSignUp ? 'Create account' : isForgot ? 'Send reset instructions' : isReset ? 'Reset password' : 'Sign in'}
               <span aria-hidden="true">→</span>
             </button>
           </form>

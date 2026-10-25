@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "nodemon index.js",
     "start": "node index.js",
-    "test": "node --test tests/requestValidation.test.js tests/requestValidation.integration.test.js tests/attendanceLocation.test.js tests/rateLimiter.test.js tests/sessionRevocation.test.js tests/passwordHashing.test.js tests/csrfProtection.test.js tests/securityHeaders.integration.test.js tests/passwordRecovery.integration.test.js tests/profileImage.test.js tests/chatAccess.test.js tests/chatRealtime.integration.test.js tests/csv.test.js tests/mongooseQueryMode.test.js",
+    "test": "node --test tests/requestValidation.test.js tests/requestValidation.integration.test.js tests/attendanceLocation.test.js tests/rateLimiter.test.js tests/sessionRevocation.test.js tests/passwordHashing.test.js tests/loginCooldown.test.js tests/csrfProtection.test.js tests/securityHeaders.integration.test.js tests/passwordRecovery.integration.test.js tests/profileImage.test.js tests/chatAccess.test.js tests/chatRealtime.integration.test.js tests/csv.test.js tests/mongooseQueryMode.test.js",
     "seed:admin": "node scripts/seedAdmin.js"
   },
   "keywords": [],

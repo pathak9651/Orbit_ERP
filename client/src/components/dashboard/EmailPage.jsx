@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getEmailDirectory, getSentEmails, sendWorkspaceEmail } from '../../services/api.js'
 import Pagination from '../common/Pagination.jsx'
+import LoadingState from '../common/LoadingState.jsx'
 import './EmailPage.css'
 
 /** Converts an internal role key into a readable directory label. */
@@ -125,7 +126,7 @@ export default function EmailPage({ user }) {
       <Pagination pagination={directoryPagination} onPageChange={setDirectoryPage} disabled={loading} />
 
       <div className="email-directory" aria-label="Recipient directory">
-        {loading ? <p className="email-empty">Loading users…</p> : filteredUsers.length ? filteredUsers.map((person) => <label className={`email-person ${selected.includes(person.id) ? 'is-selected' : ''}`} key={person.id}>
+        {loading ? <LoadingState label="Loading users" /> : filteredUsers.length ? filteredUsers.map((person) => <label className={`email-person ${selected.includes(person.id) ? 'is-selected' : ''}`} key={person.id}>
           <input type="checkbox" checked={selected.includes(person.id)} onChange={() => togglePerson(person.id)} />
           <span className="avatar avatar-small" aria-hidden="true">{person.name?.[0]?.toUpperCase() || 'U'}</span>
           <span className="email-person-copy"><strong>{person.name}</strong><span>{person.email}</span></span>
@@ -141,7 +142,7 @@ export default function EmailPage({ user }) {
     </form>
 
     <section className="panel-card email-history-card"><div className="email-section-heading"><div><h2>{user.role === 'admin' ? 'Email activity' : 'Your sent emails'}</h2><p>{user.role === 'admin' ? 'Recent delivery records across the workspace.' : 'Your recent email delivery records.'}</p></div></div>
-      {loading ? <p className="email-empty">Loading email activity…</p> : history.length ? <div className="email-history-list">{history.map((item) => <details className="email-history-item" key={item.id}>
+      {loading ? <LoadingState label="Loading email activity" /> : history.length ? <div className="email-history-list">{history.map((item) => <details className="email-history-item" key={item.id}>
         <summary><span className="email-history-main"><strong>{item.subject}</strong><span>{item.sender ? `From ${item.sender.name} · ` : ''}{item.recipients.length} recipient{item.recipients.length === 1 ? '' : 's'} · {formatDate(item.sentAt || item.createdAt)}</span></span><span className={`email-delivery-status ${item.status}`}>{item.status}</span></summary>
         <div className="email-history-detail"><p>{item.message}</p><strong>Recipients</strong><span>{item.recipients.map((person) => `${person.name} (${person.email}) · ${displayRole(person.role)}${person.department ? ` · ${person.department}` : ''}`).join('\n')}</span>{item.error && <p className="form-error">{item.error}</p>}</div>
       </details>)}</div> : <p className="email-empty">No email activity yet.</p>}

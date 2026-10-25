@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { validateClientForm, validateProfileImageFile } from './validation.js'
+import { validateClientForm, validateProfileImageFile, validateSpreadsheetFile } from './validation.js'
 import { getChatMessageStatus, shouldShowOffPageChatNotification } from './chat.js'
 
 test('client profile image checks allow supported images and reject unsafe or oversized files', () => {
@@ -8,6 +8,33 @@ test('client profile image checks allow supported images and reject unsafe or ov
   assert.match(validateProfileImageFile({ type: 'image/svg+xml', size: 500 }), /JPEG, PNG, or WebP/)
   assert.match(validateProfileImageFile({ type: 'image/png', size: 1_572_865 }), /1.5 MB or smaller/)
   assert.match(validateProfileImageFile(null), /Choose a profile image/)
+})
+
+test('spreadsheet upload validation accepts an XLSX ZIP signature', async () => {
+  const file = {
+    name: 'users.xlsx',
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    size: 32,
+    slice: () => ({ arrayBuffer: async () => Uint8Array.from([0x50, 0x4b, 0x03, 0x04]).buffer }),
+  }
+
+  assert.equal(await validateSpreadsheetFile(file), '')
+})
+
+test('spreadsheet upload validation rejects incorrect name, type, size, and signature', async () => {
+  const createFile = (overrides = {}) => ({
+    name: 'users.xlsx',
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    size: 32,
+    slice: () => ({ arrayBuffer: async () => Uint8Array.from([0x50, 0x4b, 0x03, 0x04]).buffer }),
+    ...overrides,
+  })
+
+  assert.match(await validateSpreadsheetFile(createFile({ name: 'users.csv' })), /\.xlsx/)
+  assert.match(await validateSpreadsheetFile(createFile({ type: 'text/html' })), /file type is not supported/)
+  assert.match(await validateSpreadsheetFile(createFile({ size: 0 })), /spreadsheet is empty/)
+  assert.match(await validateSpreadsheetFile(createFile({ size: 5 * 1024 * 1024 + 1 })), /smaller than 5 MB/)
+  assert.match(await validateSpreadsheetFile(createFile({ slice: () => ({ arrayBuffer: async () => Uint8Array.from([0x3c, 0x68, 0x74, 0x6d]).buffer }) })), /not a valid \.xlsx/)
 })
 
 test('client accepts valid signup fields and rejects weak or malformed values', () => {

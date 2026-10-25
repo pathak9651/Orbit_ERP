@@ -4,6 +4,8 @@ import Footer from '../layout/Footer.jsx'
 import PasswordInput from '../shared/PasswordInput.jsx'
 import { createAdminUser, downloadAdminDataCsv, getAdminUsers, importAdminUsers, importAdminUsersFromGoogleSheet, updateAdminUser } from '../../services/api.js'
 import Pagination from '../common/Pagination.jsx'
+import LoadingState from '../common/LoadingState.jsx'
+import { validateSpreadsheetFile } from '../../services/validation.js'
 
 /** Formats account creation dates for the administrator's user list. */
 function formatDate(value) {
@@ -105,8 +107,8 @@ export default function UserManagementPage({ currentUserId }) {
     setNotice('')
     setImportErrors([])
     try {
-      if (spreadsheetFile.size > 5 * 1024 * 1024) throw new Error('Choose a spreadsheet smaller than 5 MB.')
-      if (!/\.xlsx$/i.test(spreadsheetFile.name)) throw new Error('Choose an Excel .xlsx file. For CSV data, use a public Google Sheets link.')
+      const fileValidationMessage = await validateSpreadsheetFile(spreadsheetFile)
+      if (fileValidationMessage) throw new Error(fileValidationMessage)
       const sheetRows = await readSheet(spreadsheetFile)
       const [headers, ...dataRows] = sheetRows
       if (!headers?.length) throw new Error('The worksheet does not contain a header row.')
@@ -251,7 +253,7 @@ export default function UserManagementPage({ currentUserId }) {
 
         <section className="panel-card user-table-panel">
           {isLoading ? (
-            <div className="user-table-state" role="status">Loading user accounts...</div>
+            <LoadingState label="Loading user accounts" />
           ) : users.length === 0 ? (
             <div className="user-table-state">No user accounts found.</div>
           ) : (

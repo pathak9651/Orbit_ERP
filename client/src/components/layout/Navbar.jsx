@@ -89,14 +89,6 @@ export default function Navbar({ user, currentPage, onNavigate }) {
         ))}
       </nav>
 
-      <div className="sidebar-bottom">
-        <div className="help-card">
-          <span className="help-symbol" aria-hidden="true">?</span>
-          <strong>Need a hand?</strong>
-          <p>Questions about your workspace? Get in touch with our support team.</p>
-          <a href="mailto:support@orbit.example">Contact support <span aria-hidden="true">&gt;</span></a>
-        </div>
-      </div>
     </aside>
     {isMobileViewport && !isSidebarExpanded && <button
       className="mobile-sidebar-toggle mobile-sidebar-open-toggle"

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import Footer from '../layout/Footer.jsx'
+import LoadingState from '../common/LoadingState.jsx'
 import { getAdminOverview } from '../../services/api.js'
 
 /** Provides date strings for the browser's local calendar without a UTC date shift. */
@@ -74,7 +75,7 @@ export default function AdminOverviewPage() {
         </form>
 
         {error && <p className="form-message error" role="alert">{error}</p>}
-        {isLoading && !overview && <p className="overview-loading" role="status">Loading company records…</p>}
+        {isLoading && !overview && <LoadingState label="Loading company records" />}
         {overview && <>
           <section className="overview-section" aria-labelledby="people-heading">
             <div className="section-heading"><div><h2 id="people-heading">People</h2><p>Current account snapshot{overview.filters.selectedDepartment ? ` · ${overview.filters.selectedDepartment.name}` : ' · All departments'}</p></div></div>

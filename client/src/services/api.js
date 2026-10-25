@@ -55,6 +55,8 @@ async function request(path, options = {}) {
   if (!response.ok) {
     const error = new Error(result.message || 'The request could not be completed.')
     error.status = response.status
+    const retryAfterSeconds = Number(response.headers.get('retry-after'))
+    if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) error.retryAfterSeconds = retryAfterSeconds
     throw error
   }
   return result

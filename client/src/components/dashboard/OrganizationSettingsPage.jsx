@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import Footer from '../layout/Footer.jsx'
+import LoadingState from '../common/LoadingState.jsx'
 import {
   createAdminDepartment,
   createAdminRole,
@@ -88,7 +89,7 @@ export default function OrganizationSettingsPage() {
         </div>
         {error && <p className="form-message error" role="alert">{error}</p>}
         {notice && <p className="form-message success" role="status">{notice}</p>}
-        {loading ? <div className="user-table-state" role="status">Loading organization settings...</div> : (
+        {loading ? <LoadingState label="Loading organization settings" /> : (
           <div className="organization-settings-grid">
             <section className="panel-card organization-setting-card">
               <div className="profile-section-heading">

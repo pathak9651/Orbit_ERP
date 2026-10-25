@@ -13,6 +13,7 @@ import EmailPage from './components/dashboard/EmailPage.jsx'
 import BillingPage from './components/dashboard/BillingPage.jsx'
 import AuditEventsPage from './components/dashboard/AuditEventsPage.jsx'
 import ChatPage from './components/dashboard/ChatPage.jsx'
+import LoadingState from './components/common/LoadingState.jsx'
 import ProfilePage from './components/profile/ProfilePage.jsx'
 import Navbar from './components/layout/Navbar.jsx'
 import HorizontalNavbar from './components/layout/HorizontalNavbar.jsx'
@@ -41,6 +42,7 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState(readWorkspacePageFromUrl)
   const [authError, setAuthError] = useState('')
   const [authNotice, setAuthNotice] = useState('')
+  const [loginCooldownUntil, setLoginCooldownUntil] = useState(0)
   const [resetToken, setResetToken] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -195,6 +197,7 @@ export default function App() {
     try {
       if (authMode === 'login') {
         const result = await signIn(details)
+        setLoginCooldownUntil(0)
         setNotifications([])
         setUnreadCount(0)
         setHasNewChatMessage(false)
@@ -219,6 +222,11 @@ export default function App() {
       }
     } catch (error) {
       setAuthError(error.message || 'Could not connect to the server.')
+      if (authMode === 'login' && error.status === 429 && error.retryAfterSeconds) {
+        setLoginCooldownUntil(Date.now() + error.retryAfterSeconds * 1000)
+      } else if (authMode === 'login') {
+        setLoginCooldownUntil(0)
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -261,7 +269,7 @@ export default function App() {
   }
 
   if (isLoading) {
-    return <main className="loading-screen" aria-label="Loading Orbit"><span className="loading-mark">o</span></main>
+    return <main className="loading-screen"><LoadingState label="Preparing your Orbit workspace" size="large" /></main>
   }
 
   if (!user) {
@@ -274,6 +282,7 @@ export default function App() {
         notice={authNotice}
         busy={isSubmitting}
         resetToken={resetToken}
+        loginCooldownUntil={loginCooldownUntil}
       />
     )
   }

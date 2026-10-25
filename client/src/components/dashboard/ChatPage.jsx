@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Pagination from '../common/Pagination.jsx'
+import LoadingState from '../common/LoadingState.jsx'
 import { getChatMessageStatus } from '../../services/chat.js'
 import {
   getChatContacts, getChatConversations, getChatDepartments, getChatMessages,
@@ -224,6 +225,7 @@ export default function ChatPage({ user }) {
     <section className="chat-workspace panel-card" aria-label="Team chat workspace">
       <aside className="chat-sidebar">
         <div className="chat-sidebar-heading"><h2>Conversations</h2><span>{conversationPagination?.totalItems || conversations.length}</span></div>
+        {loading && <LoadingState label="Loading conversations" />}
         <div className="chat-conversation-list">
           {conversations.map((conversation) => <button className={`chat-conversation-item ${selectedConversation?.id === conversation.id ? 'is-selected' : ''}`} key={conversation.id} type="button" onClick={() => { setSelectedConversation(conversation); setMessagePage(1) }}>
             <span className="chat-conversation-avatar">{conversation.type === 'department' ? 'T' : conversationTitle(conversation, user).slice(0, 1).toUpperCase()}</span>

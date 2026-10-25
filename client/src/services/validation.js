@@ -1,6 +1,13 @@
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i
 const MAX_PROFILE_IMAGE_BYTES = 1_572_864
+export const MAX_SPREADSHEET_BYTES = 5 * 1024 * 1024
+const SPREADSHEET_MIME_TYPES = new Set([
+  '',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/zip',
+  'application/octet-stream',
+])
 
 /** Checks the selected profile image type and size before sending it to the server. */
 export function validateProfileImageFile(file) {
@@ -8,6 +15,27 @@ export function validateProfileImageFile(file) {
   if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) return 'Choose a JPEG, PNG, or WebP image.'
   if (file.size <= 0) return 'The selected image is empty.'
   if (file.size > MAX_PROFILE_IMAGE_BYTES) return 'Profile images must be 1.5 MB or smaller.'
+  return ''
+}
+
+/** Checks the Excel filename, declared type, size, and ZIP signature before parsing. */
+export async function validateSpreadsheetFile(file) {
+  if (!file || typeof file.name !== 'string' || typeof file.slice !== 'function') {
+    return 'Choose an Excel .xlsx file.'
+  }
+  if (!/\.xlsx$/i.test(file.name)) return 'Choose an Excel .xlsx file. For CSV data, use a public Google Sheets link.'
+  if (!Number.isFinite(file.size) || file.size <= 0) return 'The selected spreadsheet is empty.'
+  if (file.size > MAX_SPREADSHEET_BYTES) return 'Choose a spreadsheet smaller than 5 MB.'
+  if (!SPREADSHEET_MIME_TYPES.has(file.type || '')) return 'The selected file type is not supported. Choose an .xlsx spreadsheet.'
+
+  try {
+    const signature = new Uint8Array(await file.slice(0, 4).arrayBuffer())
+    if (signature.length !== 4 || signature[0] !== 0x50 || signature[1] !== 0x4b || signature[2] !== 0x03 || signature[3] !== 0x04) {
+      return 'The selected file is not a valid .xlsx spreadsheet.'
+    }
+  } catch {
+    return 'The selected spreadsheet could not be read.'
+  }
   return ''
 }
 

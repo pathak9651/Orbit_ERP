@@ -13,6 +13,9 @@ import {
   verifyUserPassword,
 } from '../services/auth.js';
 
+const LOGIN_FAILURE_LIMIT = 3;
+const LOGIN_COOLDOWN_MS = 10 * 60 * 1000;
+
 async function recordAuthAudit(req, event) {
   try { await recordAuditEvent(req, event); }
   catch (error) { console.error('Security audit write failed:', error.message); }
@@ -91,10 +94,49 @@ export async function signIn(req, res, next) {
   }
 
   try {
-    const user = await User.findOne({ email }).select('+password +profileImage').populate('department', 'name');
+    const user = await User.findOne({ email }).select('+password +profileImage +failedLoginAttempts +loginCooldownUntil').populate('department', 'name');
+    const currentTime = Date.now();
+    if (user?.loginCooldownUntil && user.loginCooldownUntil.getTime() > currentTime) {
+      const remainingSeconds = Math.ceil((user.loginCooldownUntil.getTime() - currentTime) / 1000);
+      await recordAuthAudit(req, { eventType: 'login', outcome: 'failure', targetUser: user._id, details: { reason: 'cooldown' } });
+      res.set('Retry-After', String(remainingSeconds));
+      return res.status(429).json({ message: 'Too many failed login attempts. Try again after the cooldown period.' });
+    }
+
     if (!user || !(await verifyUserPassword(user, password))) {
+      if (user) {
+        // Expired cooldowns start a fresh consecutive-failure window.
+        if (user.loginCooldownUntil && user.loginCooldownUntil.getTime() <= currentTime) {
+          await User.updateOne(
+            { _id: user._id, loginCooldownUntil: { $lte: new Date(currentTime) } },
+            { $set: { failedLoginAttempts: 0 }, $unset: { loginCooldownUntil: 1 } },
+          );
+        }
+
+        // Increment atomically so parallel incorrect attempts cannot lose a failure count.
+        const updatedLoginState = await User.findOneAndUpdate(
+          { _id: user._id },
+          { $inc: { failedLoginAttempts: 1 } },
+          { returnDocument: 'after', projection: { failedLoginAttempts: 1 } },
+        );
+        const failedAttempts = updatedLoginState?.failedLoginAttempts ?? (user.failedLoginAttempts || 0) + 1;
+        if (failedAttempts >= LOGIN_FAILURE_LIMIT) {
+          await User.updateOne(
+            { _id: user._id },
+            { $set: { loginCooldownUntil: new Date(Date.now() + LOGIN_COOLDOWN_MS) } },
+          );
+        }
+      }
       await recordAuthAudit(req, { eventType: 'login', outcome: 'failure', targetUser: user?._id || null });
       return res.status(401).json({ message: 'Invalid email or password.' });
+    }
+
+    // A correct password ends the consecutive-failure sequence, including before an approval response.
+    if ((user.failedLoginAttempts || 0) > 0 || user.loginCooldownUntil) {
+      await User.updateOne(
+        { _id: user._id },
+        { $set: { failedLoginAttempts: 0 }, $unset: { loginCooldownUntil: 1 } },
+      );
     }
     if (user.isVerified === false) {
       await recordAuthAudit(req, { eventType: 'login', outcome: 'failure', targetUser: user._id, details: { reason: 'unverified' } });
