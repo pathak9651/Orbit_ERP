@@ -2,7 +2,7 @@ import { WebSocketServer, WebSocket } from 'ws'
 import User from '../models/user.js'
 import ChatConversation from '../models/chatConversation.js'
 import ChatMessage from '../models/chatMessage.js'
-import { canAccessDepartmentRoom } from './chatAccess.js'
+import { canAccessDepartmentRoom, getConversationAccessFilter } from './chatAccess.js'
 import { TOKEN_COOKIE, getSessionRejectionReason, verifyAccessToken } from './auth.js'
 
 const connectedClients = new Map()
@@ -78,7 +78,8 @@ export function attachChatWebSocket(server) {
       try {
         const event = JSON.parse(rawMessage.toString())
         if (event.type === 'chat:delivered' && event.messageId && event.conversationId) {
-          const conversation = await ChatConversation.findById(event.conversationId).select('type participants department').lean()
+          if (!/^[a-f\d]{24}$/i.test(event.conversationId) || !/^[a-f\d]{24}$/i.test(event.messageId)) return
+          const conversation = await ChatConversation.findOne({ _id: event.conversationId, ...getConversationAccessFilter(request.chatUser) }).select('type participants department').lean()
           if (!conversation) return
           const isMember = conversation.participants.some((participantId) => String(participantId) === userId)
           if (!(isMember || (conversation.type === 'department' && canAccessDepartmentRoom(request.chatUser, conversation.department)))) return

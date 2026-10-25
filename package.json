@@ -8,9 +8,11 @@
     "dev:server": "npm run dev --prefix server",
     "build": "npm run build --prefix client",
     "test": "npm run test --prefix server && npm run test --prefix client",
+    "lint": "eslint server",
     "start": "npm start --prefix server"
   },
   "devDependencies": {
-    "concurrently": "^9.2.1"
+    "concurrently": "^9.2.1",
+    "eslint": "^10.13.0"
   }
 }

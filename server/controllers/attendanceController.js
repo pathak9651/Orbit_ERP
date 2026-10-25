@@ -283,9 +283,10 @@ export async function requestAttendanceLocationCorrection(req, res, next) {
   const { latitude, longitude, accuracyMeters, clientReportedAt } = req.body?.location || {}
   const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : ''
   if (!reason || reason.length > 1000) return res.status(400).json({ message: 'Explain why the attendance location needs correction.' })
-  if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ message: 'Invalid attendance record.' })
+  const attendanceId = req.params.id
+  if (!mongoose.isValidObjectId(attendanceId)) return res.status(400).json({ message: 'Invalid attendance record.' })
   try {
-    const record = await Attendance.findOne({ _id: req.params.id, user: req.user._id })
+    const record = await Attendance.findOne({ _id: attendanceId, user: req.user._id })
     if (!record) return res.status(404).json({ message: 'Attendance record not found.' })
     if (record.locationCorrection?.status === 'pending') return res.status(409).json({ message: 'A location correction is already waiting for review.' })
     const receivedAt = new Date()
@@ -305,9 +306,10 @@ export async function requestAttendanceLocationCorrection(req, res, next) {
 /** Allows an authorized lead to review a GPS flag or approve/reject an employee correction. */
 export async function reviewAttendanceLocation(req, res, next) {
   const { decision, message = '' } = req.body || {}
-  if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ message: 'Invalid attendance record.' })
+  const attendanceId = req.params.id
+  if (!mongoose.isValidObjectId(attendanceId)) return res.status(400).json({ message: 'Invalid attendance record.' })
   try {
-    const record = await Attendance.findById(req.params.id).populate('user', 'department')
+    const record = await Attendance.findById(attendanceId).populate('user', 'department')
     if (!record) return res.status(404).json({ message: 'Attendance record not found.' })
     if (req.user.role === 'manager' && !managerCanReviewAttendance(req.user, record.user)) {
       return res.status(403).json({ message: 'You can review attendance locations only for your department.' })

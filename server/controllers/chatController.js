@@ -5,7 +5,7 @@ import ChatMessage from '../models/chatMessage.js'
 import Department from '../models/department.js'
 import User from '../models/user.js'
 import { broadcastChatEvent } from '../services/chatRealtime.js'
-import { canAccessDepartmentRoom, canUsersChat } from '../services/chatAccess.js'
+import { canAccessDepartmentRoom, canUsersChat, getConversationAccessFilter } from '../services/chatAccess.js'
 import { getPaginationOptions, paginateQuery } from '../utils/pagination.js'
 import { serializeCsvRow } from '../utils/csv.js'
 import { recordAuditEvent } from '../services/audit.js'
@@ -20,7 +20,7 @@ function safePerson(user) {
 /** Confirms that the signed-in user is a participant or an authorized department administrator. */
 async function getAccessibleConversation(conversationId, user) {
   if (!mongoose.isValidObjectId(conversationId)) return null
-  const conversation = await ChatConversation.findById(conversationId).populate('participants', 'name email role department').populate('department', 'name').lean()
+  const conversation = await ChatConversation.findOne({ _id: conversationId, ...getConversationAccessFilter(user) }).populate('participants', 'name email role department').populate('department', 'name').lean()
   if (!conversation) return null
   if (conversation.type === 'department' && canAccessDepartmentRoom(user, conversation.department?._id)) return conversation
   return conversation.participants.some((participant) => String(participant._id) === String(user._id)) ? conversation : null

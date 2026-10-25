@@ -98,13 +98,15 @@ export async function createTask(req, res, next) {
 export async function updateTaskStatus(req, res, next) {
   const { status } = req.body || {}
   if (!['pending', 'in-progress', 'completed'].includes(status)) return res.status(400).json({ message: 'Choose a valid task status.' })
-  if (!validId(req.params.id)) return res.status(400).json({ message: 'Invalid task ID.' })
+  const taskId = req.params.id
+  if (!validId(taskId)) return res.status(400).json({ message: 'Invalid task ID.' })
   try {
-    const task = await Task.findById(req.params.id)
+    let taskFilter = { _id: taskId }
+    if (!['admin', 'hr'].includes(req.user.role)) {
+      taskFilter = { _id: taskId, $or: [{ assignedTo: req.user._id }, { assignedBy: req.user._id }] }
+    }
+    const task = await Task.findOne(taskFilter)
     if (!task) return res.status(404).json({ message: 'Task not found.' })
-    const isAssignee = String(task.assignedTo) === String(req.user._id)
-    const isAssigner = String(task.assignedBy) === String(req.user._id)
-    if (!isAssignee && !isAssigner && !['admin', 'hr'].includes(req.user.role)) return res.status(403).json({ message: 'You cannot update this task.' })
     const previousStatus = task.status
     task.status = status
     await task.save()

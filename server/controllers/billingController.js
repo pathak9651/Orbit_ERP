@@ -139,11 +139,12 @@ export async function createInvoice(req, res, next) {
 
 /** Changes an invoice status only when the requested lifecycle transition is allowed. */
 export async function updateInvoiceStatus(req, res, next) {
-  if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ message: 'Invalid invoice ID.' })
+  const invoiceId = req.params.id
+  if (!mongoose.isValidObjectId(invoiceId)) return res.status(400).json({ message: 'Invalid invoice ID.' })
   const status = req.body?.status
   if (!validStatuses.includes(status)) return res.status(400).json({ message: 'Choose a valid invoice status.' })
   try {
-    const invoice = await Invoice.findById(req.params.id)
+    const invoice = await Invoice.findById(invoiceId)
     if (!invoice) return res.status(404).json({ message: 'Invoice not found.' })
     if (invoice.status === status) return res.json({ invoice: publicInvoice(invoice), message: 'Invoice status is unchanged.' })
     if (!allowedTransitions[invoice.status]?.includes(status)) return res.status(409).json({ message: `An invoice cannot move from ${invoice.status} to ${status}.` })
@@ -169,9 +170,10 @@ export async function updateInvoiceStatus(req, res, next) {
 
 /** Streams a generated PDF attachment for an existing invoice. */
 export async function downloadInvoice(req, res, next) {
-  if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ message: 'Invalid invoice ID.' })
+  const invoiceId = req.params.id
+  if (!mongoose.isValidObjectId(invoiceId)) return res.status(400).json({ message: 'Invalid invoice ID.' })
   try {
-    const invoice = await Invoice.findById(req.params.id)
+    const invoice = await Invoice.findById(invoiceId)
     if (!invoice) return res.status(404).json({ message: 'Invoice not found.' })
     const pdf = await createInvoicePdf(invoice)
     res.setHeader('Content-Type', 'application/pdf')
@@ -183,9 +185,10 @@ export async function downloadInvoice(req, res, next) {
 
 /** Emails the invoice PDF to the customer and returns its delivery result. */
 export async function emailInvoice(req, res, next) {
-  if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ message: 'Invalid invoice ID.' })
+  const invoiceId = req.params.id
+  if (!mongoose.isValidObjectId(invoiceId)) return res.status(400).json({ message: 'Invalid invoice ID.' })
   try {
-    const invoice = await Invoice.findById(req.params.id)
+    const invoice = await Invoice.findById(invoiceId)
     if (!invoice) return res.status(404).json({ message: 'Invoice not found.' })
     if (!invoice.customerEmail) return res.status(400).json({ message: 'This invoice has no customer email address.' })
     if (['draft', 'cancelled'].includes(invoice.status)) return res.status(409).json({ message: 'Only sent or overdue invoices can be emailed.' })

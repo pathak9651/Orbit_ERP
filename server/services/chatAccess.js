@@ -10,3 +10,14 @@ export function canUsersChat(firstUser, secondUser) {
 export function canAccessDepartmentRoom(user, departmentId) {
   return user?.role === 'admin' || String(user?.department?._id || user?.department || '') === String(departmentId)
 }
+
+/** Builds the conversation ownership predicate before loading protected chat data. */
+export function getConversationAccessFilter(user) {
+  const accessConditions = [{ participants: user._id }]
+  if (user.role === 'admin') {
+    accessConditions.push({ type: 'department' })
+  } else if (user.department) {
+    accessConditions.push({ type: 'department', department: user.department._id || user.department })
+  }
+  return { $or: accessConditions }
+}

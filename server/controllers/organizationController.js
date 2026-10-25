@@ -69,9 +69,10 @@ export async function createRole(req, res, next) {
 
 /** Deletes an unused custom role without allowing removal of system roles. */
 export async function deleteRole(req, res, next) {
-  if (!isValidObjectId(req.params.id)) return res.status(400).json({ message: 'Invalid role ID.' })
+  const roleId = req.params.id
+  if (!isValidObjectId(roleId)) return res.status(400).json({ message: 'Invalid role ID.' })
   try {
-    const role = await Role.findById(req.params.id)
+    const role = await Role.findById(roleId)
     if (!role) return res.status(404).json({ message: 'Role not found.' })
     if (role.isSystem || SYSTEM_ROLES.some((item) => item.key === role.key)) {
       return res.status(400).json({ message: 'Built-in roles cannot be deleted.' })
@@ -105,9 +106,10 @@ export async function createDepartment(req, res, next) {
 
 /** Removes a department only when it is not assigned to any account. */
 export async function deleteDepartment(req, res, next) {
-  if (!isValidObjectId(req.params.id)) return res.status(400).json({ message: 'Invalid department ID.' })
+  const departmentId = req.params.id
+  if (!isValidObjectId(departmentId)) return res.status(400).json({ message: 'Invalid department ID.' })
   try {
-    const department = await Department.findById(req.params.id)
+    const department = await Department.findById(departmentId)
     if (!department) return res.status(404).json({ message: 'Department not found.' })
     if (await User.exists({ department: department._id })) {
       return res.status(409).json({ message: 'This department is assigned to users. Reassign them before deleting it.' })

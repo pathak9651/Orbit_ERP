@@ -85,7 +85,8 @@ export async function createLeaveRequest(req, res, next) {
 
 /** Forwards, approves, or rejects a request while preserving each reviewer's message. */
 export async function actOnLeaveRequest(req, res, next) {
-  if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ message: 'Invalid leave request ID.' })
+  const leaveRequestId = req.params.id
+  if (!mongoose.isValidObjectId(leaveRequestId)) return res.status(400).json({ message: 'Invalid leave request ID.' })
   const { action } = req.body || {}
   const message = typeof req.body?.message === 'string' ? req.body.message.trim() : ''
   if (!['forward', 'approve', 'reject'].includes(action)) return res.status(400).json({ message: 'Choose a valid leave action.' })
@@ -93,7 +94,7 @@ export async function actOnLeaveRequest(req, res, next) {
   if ((action === 'forward' || action === 'reject') && message.length < 3) return res.status(400).json({ message: 'Add a suggestion or decision message before continuing.' })
 
   try {
-    const request = await LeaveRequest.findById(req.params.id)
+    const request = await LeaveRequest.findById(leaveRequestId)
     if (!request) return res.status(404).json({ message: 'Leave request not found.' })
     if (request.status !== 'pending') return res.status(409).json({ message: 'This leave request has already been decided.' })
     if (request.requester.equals(req.user._id)) return res.status(403).json({ message: 'You cannot review your own leave request.' })

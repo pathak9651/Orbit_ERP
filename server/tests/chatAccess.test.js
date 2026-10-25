@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { canAccessDepartmentRoom, canUsersChat } from '../services/chatAccess.js'
+import { canAccessDepartmentRoom, canUsersChat, getConversationAccessFilter } from '../services/chatAccess.js'
 
 const departmentA = '64b000000000000000000001'
 const departmentB = '64b000000000000000000002'
@@ -27,4 +27,15 @@ test('users cannot open another department room while administrators can', () =>
 
 test('a user cannot open a direct chat with themselves', async () => {
   assert.equal(canUsersChat(user('same', 'admin'), user('same', 'employee')), false)
+})
+
+test('conversation lookups constrain non-admins to their own membership or department', () => {
+  const accessFilter = getConversationAccessFilter(user('employee-a', 'employee', departmentA))
+  assert.deepEqual(accessFilter, {
+    $or: [
+      { participants: 'employee-a' },
+      { type: 'department', department: departmentA },
+    ],
+  })
+  assert.equal(accessFilter.$or.some((condition) => condition.participants === 'employee-b'), false)
 })
