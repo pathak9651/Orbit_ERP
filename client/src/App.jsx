@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import AuthScreen from './components/auth/AuthScreen.jsx'
 import HomePage from './components/dashboard/HomePage.jsx'
+import AdminOverviewPage from './components/dashboard/AdminOverviewPage.jsx'
 import AdminModulePage from './components/dashboard/AdminModulePage.jsx'
 import UserManagementPage from './components/dashboard/UserManagementPage.jsx'
 import OrganizationSettingsPage from './components/dashboard/OrganizationSettingsPage.jsx'
@@ -17,10 +18,25 @@ import HorizontalNavbar from './components/layout/HorizontalNavbar.jsx'
 import { canAccessBilling } from './services/permissions.js'
 import { getCurrentUser, getNotifications, markAllNotificationsRead, markNotificationRead, requestPasswordReset, resetPassword, signIn, signOut, signUp } from './services/api.js'
 
+const WORKSPACE_PAGES = new Set(['overview', 'users', 'tasks', 'attendance', 'leaves', 'email', 'housekeeping', 'billing', 'revenue', 'reports', 'audit', 'organization', 'profile'])
+
+/** Restores a known workspace page from the browser URL, defaulting safely to Home. */
+function readWorkspacePageFromUrl() {
+  const requestedPage = window.location.hash.slice(1)
+  return WORKSPACE_PAGES.has(requestedPage) ? requestedPage : 'overview'
+}
+
+/** Prevents a manually entered URL from exposing a page outside the user's navigation. */
+function canOpenWorkspacePage(user, page) {
+  if (user.role === 'admin') return true
+  return ['overview', 'profile', 'tasks', 'attendance', 'leaves', 'email'].includes(page)
+    || (page === 'billing' && canAccessBilling(user))
+}
+
 export default function App() {
   const [authMode, setAuthMode] = useState('login')
   const [user, setUser] = useState(null)
-  const [currentPage, setCurrentPage] = useState('overview')
+  const [currentPage, setCurrentPage] = useState(readWorkspacePageFromUrl)
   const [authError, setAuthError] = useState('')
   const [authNotice, setAuthNotice] = useState('')
   const [resetToken, setResetToken] = useState('')
@@ -41,11 +57,35 @@ export default function App() {
     }
   }, [])
 
+  // Keep route changes in the URL so refresh and browser back/forward restore the page.
+  useEffect(() => {
+    function restorePageFromUrl() {
+      setCurrentPage(readWorkspacePageFromUrl())
+      setAuthError('')
+    }
+    window.addEventListener('popstate', restorePageFromUrl)
+    window.addEventListener('hashchange', restorePageFromUrl)
+    return () => {
+      window.removeEventListener('popstate', restorePageFromUrl)
+      window.removeEventListener('hashchange', restorePageFromUrl)
+    }
+  }, [])
+
+  useEffect(() => {
+    const pageHash = `#${currentPage}`
+    if (window.location.hash === pageHash) return
+    window.history.pushState({ page: currentPage }, '', `${window.location.pathname}${window.location.search}${pageHash}`)
+  }, [currentPage])
+
   // Restore the cookie-backed session at startup so a page refresh does not sign the user out.
   useEffect(() => {
     let isMounted = true
     getCurrentUser()
-      .then(({ user: currentUser }) => { if (isMounted) setUser(currentUser) })
+      .then(({ user: currentUser }) => {
+        if (!isMounted) return
+        setUser(currentUser)
+        setCurrentPage((page) => canOpenWorkspacePage(currentUser, page) ? page : 'overview')
+      })
       .catch(() => {})
       .finally(() => { if (isMounted) setIsLoading(false) })
     return () => { isMounted = false }
@@ -63,7 +103,7 @@ export default function App() {
         const { user: refreshedUser } = await getCurrentUser()
         if (!isActive) return
         setUser(refreshedUser)
-        setCurrentPage((page) => refreshedUser.role !== 'admin' && !['overview', 'profile', 'tasks', 'attendance', 'leaves', 'email'].includes(page) && !(page === 'billing' && canAccessBilling(refreshedUser)) ? 'overview' : page)
+        setCurrentPage((page) => canOpenWorkspacePage(refreshedUser, page) ? page : 'overview')
       } catch (error) {
         if (!isActive || (error.status !== 401 && error.status !== 403)) return
         setUser(null)
@@ -115,7 +155,9 @@ export default function App() {
         setCurrentPage('overview')
         setUser(result.user)
       } else if (authMode === 'signup') {
-        const result = await signUp(details)
+        if (details.password !== details.confirmPassword) throw new Error('The passwords do not match.')
+        const { confirmPassword, ...signupDetails } = details
+        const result = await signUp(signupDetails)
         setAuthMode('login')
         setAuthNotice(result.message || 'Your account request was sent for approval.')
       } else if (authMode === 'forgot') {
@@ -212,6 +254,8 @@ export default function App() {
           ? <ProfilePage user={user} onUserUpdated={setUser} notice={authError} />
           : user.role === 'admin' && currentPage === 'audit'
             ? <AuditEventsPage />
+          : user.role === 'admin' && currentPage === 'overview'
+            ? <AdminOverviewPage />
           : user.role === 'admin' && currentPage === 'users'
             ? <UserManagementPage currentUserId={user.id} />
           : user.role === 'admin' && currentPage === 'organization'

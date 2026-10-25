@@ -73,6 +73,11 @@ export function getCurrentUser() {
   return request('/api/me')
 }
 
+/** Loads date, department, and attendance-location filtered company metrics for administrators. */
+export function getAdminOverview(parameters) {
+  return request(withQuery('/api/admin/overview', parameters))
+}
+
 /** Loads the current user's notification feed and unread count. */
 export function getNotifications(parameters) {
   return request(withQuery('/api/notifications', parameters))
@@ -175,6 +180,15 @@ export function updateProfile(details) {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(details),
+  })
+}
+
+/** Uploads the current user's validated image as a binary request body. */
+export function updateProfileImage(imageFile) {
+  return request('/api/profile/image', {
+    method: 'PUT',
+    headers: { 'Content-Type': imageFile.type },
+    body: imageFile,
   })
 }
 

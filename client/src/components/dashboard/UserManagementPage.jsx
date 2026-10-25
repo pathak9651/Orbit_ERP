@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { readSheet } from 'read-excel-file/browser'
 import Footer from '../layout/Footer.jsx'
+import PasswordInput from '../shared/PasswordInput.jsx'
 import { createAdminUser, downloadAdminDataCsv, getAdminUsers, importAdminUsers, importAdminUsersFromGoogleSheet, updateAdminUser } from '../../services/api.js'
 import Pagination from '../common/Pagination.jsx'
 
@@ -222,7 +223,7 @@ export default function UserManagementPage({ currentUserId }) {
                 <input type="email" value={newUser.email} onChange={(event) => setNewUser((current) => ({ ...current, email: event.target.value }))} maxLength="254" autoComplete="email" required />
               </label>
               <label className="field-label">Initial password
-                <input type="password" value={newUser.password} onChange={(event) => setNewUser((current) => ({ ...current, password: event.target.value }))} minLength="8" maxLength="72" autoComplete="new-password" required />
+                <PasswordInput name="password" value={newUser.password} onChange={(event) => setNewUser((current) => ({ ...current, password: event.target.value }))} minLength="8" maxLength="72" autoComplete="new-password" required />
               </label>
               <label className="field-label">Role
                 <select value={newUser.role} onChange={(event) => setNewUser((current) => ({ ...current, role: event.target.value }))} required>
@@ -301,4 +302,5 @@ export default function UserManagementPage({ currentUserId }) {
     </section>
   )
 }
+
 

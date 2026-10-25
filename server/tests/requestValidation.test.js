@@ -7,15 +7,29 @@ test('login validation accepts a valid email and password', () => {
 })
 
 test('signup validation rejects missing and malformed credentials', () => {
-  const errors = validateRequestBody('signup', { name: 'A', email: 'bad-address', password: 'short' })
+  const errors = validateRequestBody('signup', { name: 'A', phone: '123', email: 'bad-address', dateOfBirth: '2999-01-01', password: 'short' })
   assert.ok(errors.some((message) => message.includes('Name')))
+  assert.ok(errors.some((message) => message.includes('Phone number')))
   assert.ok(errors.some((message) => message.includes('valid email')))
+  assert.ok(errors.some((message) => message.includes('date of birth')))
   assert.ok(errors.some((message) => message.includes('8 characters')))
+})
+
+test('signup validation accepts all required personal details', () => {
+  const errors = validateRequestBody('signup', { name: 'Jordan Lee', phone: '+15551234567', email: 'jordan@example.com', dateOfBirth: '1995-06-12', password: 'correct horse' })
+  assert.deepEqual(errors, [])
 })
 
 test('validation rejects fields the endpoint does not accept', () => {
   const errors = validateRequestBody('profile', { name: 'Jordan Lee', email: 'jordan@example.com', role: 'admin' })
   assert.ok(errors.some((message) => message.includes('Unexpected field')))
+})
+
+test('profile validation accepts editable phone and birth date and rejects malformed values', () => {
+  const validProfile = { name: 'Jordan Lee', email: 'jordan@example.com', phone: '+1 (555) 123-4567', dateOfBirth: '1995-06-12' }
+  assert.deepEqual(validateRequestBody('profile', validProfile), [])
+  assert.ok(validateRequestBody('profile', { ...validProfile, phone: '123' }).some((message) => /phone number/i.test(message)))
+  assert.ok(validateRequestBody('profile', { ...validProfile, dateOfBirth: '2999-01-01' }).some((message) => message.includes('date of birth')))
 })
 
 test('invoice validation accepts a valid draft without a customer email', () => {

@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react'
 import { canAccessBilling } from '../../services/permissions.js'
+import orbitLogo from '../../assets/orbit-logo.svg'
 
 // Employee navigation contains only pages available to every signed-in role.
 const userNavigation = [
@@ -29,26 +31,54 @@ const adminNavigation = [
 
 /** Renders the responsive workspace navigation for the current user's role. */
 export default function Navbar({ user, currentPage, onNavigate }) {
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(true)
+  const [isMobileViewport, setIsMobileViewport] = useState(() => window.matchMedia('(max-width: 720px)').matches)
+  useEffect(() => {
+    const mobileViewport = window.matchMedia('(max-width: 720px)')
+    function updateViewport(event) {
+      setIsMobileViewport(event.matches)
+      setIsSidebarExpanded(true)
+    }
+    mobileViewport.addEventListener('change', updateViewport)
+    return () => mobileViewport.removeEventListener('change', updateViewport)
+  }, [])
   const navigation = user.role === 'admin'
     ? adminNavigation
     : [...userNavigation, ...(canAccessBilling(user) ? [{ icon: 'BI', label: 'Bills and invoices', page: 'billing' }] : [])]
 
-  return (
-    <aside className="sidebar" aria-label="Workspace navigation">
+  return <>
+    <aside className={`sidebar ${isSidebarExpanded ? 'sidebar-expanded mobile-nav-expanded' : 'sidebar-collapsed mobile-nav-collapsed'}`} aria-label="Workspace navigation">
+      <button
+        className="mobile-sidebar-toggle mobile-sidebar-close-toggle sidebar-toggle"
+        type="button"
+        aria-label={isMobileViewport ? (isSidebarExpanded ? 'Close navigation' : 'Open navigation') : (isSidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar')}
+        title={isMobileViewport ? (isSidebarExpanded ? 'Close navigation' : 'Open navigation') : (isSidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar')}
+        aria-expanded={isSidebarExpanded}
+        aria-controls="workspace-navigation"
+        onClick={() => setIsSidebarExpanded((expanded) => !expanded)}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          {isSidebarExpanded ? <path d="m15 5-7 7 7 7" /> : <path d="m9 5 7 7-7 7" />}
+        </svg>
+      </button>
       <div className="workspace-picker" aria-label="Current workspace">
-        <span className="workspace-symbol" aria-hidden="true">O</span>
+        <span className="workspace-symbol" aria-hidden="true"><img src={orbitLogo} alt="" /></span>
         <span className="workspace-copy">Orbit workspace<small>{user.role === 'admin' ? 'Administrator' : 'Personal workspace'}</small></span>
         <span className="workspace-chevron" aria-hidden="true">v</span>
       </div>
 
       <div className="navigation-label">{user.role === 'admin' ? 'ADMINISTRATION' : 'WORKSPACE'}</div>
-      <nav className="primary-navigation" aria-label="Main navigation">
+      <nav className="primary-navigation" id="workspace-navigation" aria-label="Main navigation" aria-hidden={isMobileViewport && !isSidebarExpanded} inert={isMobileViewport && !isSidebarExpanded}>
         {navigation.map((item) => (
           <button
             className={`navigation-item ${item.page === currentPage ? 'is-active' : ''}`}
             key={item.page}
             type="button"
-            onClick={() => onNavigate(item.page)}
+            title={!isSidebarExpanded || isMobileViewport ? item.label : undefined}
+            onClick={() => {
+              onNavigate(item.page)
+              if (isMobileViewport) setIsSidebarExpanded(false)
+            }}
             aria-current={item.page === currentPage ? 'page' : undefined}
           >
             <span className="navigation-icon" aria-hidden="true">{item.icon}</span>
@@ -66,5 +96,15 @@ export default function Navbar({ user, currentPage, onNavigate }) {
         </div>
       </div>
     </aside>
-  )
+    {isMobileViewport && !isSidebarExpanded && <button
+      className="mobile-sidebar-toggle mobile-sidebar-open-toggle"
+      type="button"
+      aria-label="Open navigation"
+      aria-expanded="false"
+      aria-controls="workspace-navigation"
+      onClick={() => setIsSidebarExpanded(true)}
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12h13" /><path d="m12 6 6 6-6 6" /></svg>
+    </button>}
+  </>
 }

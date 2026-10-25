@@ -1,6 +1,24 @@
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
+export const MAX_PROFILE_IMAGE_BYTES = 1_572_864
+
+/** Confirms an uploaded profile image is small and its declared type matches its binary signature. */
+export function validateProfileImageUpload(imageBuffer, contentType) {
+  if (!Buffer.isBuffer(imageBuffer) || imageBuffer.length === 0) return 'Choose a profile image to upload.'
+  if (imageBuffer.length > MAX_PROFILE_IMAGE_BYTES) return 'Profile images must be 1.5 MB or smaller.'
+
+  const detectedType = imageBuffer[0] === 0xff && imageBuffer[1] === 0xd8 && imageBuffer[2] === 0xff
+    ? 'image/jpeg'
+    : imageBuffer.length >= 8 && imageBuffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+      ? 'image/png'
+      : imageBuffer.length >= 12 && imageBuffer.toString('ascii', 0, 4) === 'RIFF' && imageBuffer.toString('ascii', 8, 12) === 'WEBP'
+        ? 'image/webp'
+        : ''
+
+  if (!detectedType || detectedType !== contentType) return 'Upload a valid JPEG, PNG, or WebP image.'
+  return ''
+}
 
 function isObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -66,15 +84,23 @@ const validate = {
     checkPassword(body, 'newPassword', 'New password', errors, { min: 8 })
   },
   signup(body, errors) {
-    if (!checkObject(body, ['name', 'email', 'password'], errors)) return
+    if (!checkObject(body, ['name', 'phone', 'email', 'dateOfBirth', 'password'], errors)) return
     checkString(body, 'name', 'Name', errors, { min: 2, max: 80 })
+    const phone = checkString(body, 'phone', 'Phone number', errors, { min: 8, max: 25 })
+    if (phone && !/^\+?\d{8,15}$/.test(phone.replace(/[\s().-]/g, ''))) errors.push('Enter a valid phone number with 8 to 15 digits.')
     checkEmail(body, errors)
+    const dateOfBirth = checkString(body, 'dateOfBirth', 'Date of birth', errors, { max: 10 })
+    if (dateOfBirth && (!isDateKey(dateOfBirth) || dateOfBirth > new Date().toISOString().slice(0, 10))) errors.push('Enter a valid date of birth that is not in the future.')
     checkPassword(body, 'password', 'Password', errors, { min: 8 })
   },
   profile(body, errors) {
-    if (!checkObject(body, ['name', 'email', 'currentPassword'], errors)) return
+    if (!checkObject(body, ['name', 'email', 'phone', 'dateOfBirth', 'currentPassword'], errors)) return
     checkString(body, 'name', 'Name', errors, { min: 2, max: 80 })
     checkEmail(body, errors)
+    const phone = checkString(body, 'phone', 'Phone number', errors, { required: false, max: 25 })
+    if (phone && !/^\+?\d{8,15}$/.test(phone.replace(/[\s().-]/g, ''))) errors.push('Enter a valid phone number with 8 to 15 digits.')
+    const dateOfBirth = checkString(body, 'dateOfBirth', 'Date of birth', errors, { required: false, max: 10 })
+    if (dateOfBirth && (!isDateKey(dateOfBirth) || dateOfBirth > new Date().toISOString().slice(0, 10))) errors.push('Enter a valid date of birth that is not in the future.')
     if (body.currentPassword !== undefined) checkPassword(body, 'currentPassword', 'Current password', errors, { required: false })
   },
   password(body, errors) {

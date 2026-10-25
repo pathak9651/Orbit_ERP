@@ -27,7 +27,7 @@
 .billing-invoice-popover p { margin: 3px 0; white-space: pre-wrap; }
 .billing-status { display: inline-flex; border-radius: 99px; background: #273139; padding: 5px 8px; color: var(--color-text-muted); font-size: 8px; }
 .billing-status.status-sent { background: #233342; color: #82c8ed; }
-.billing-status.status-paid { background: #183a30; color: #8dd6b3; }
+.billing-status.status-paid { background: #142b3c; color: #8edfff; }
 .billing-status.status-overdue { background: #46282b; color: #ff969c; }
 .billing-status.status-cancelled { background: #303033; color: #a1a1aa; }
 .billing-status.status-draft { background: #3b3422; color: #edc987; }
@@ -37,7 +37,7 @@
 .billing-email-button { color: #b9cfff; }
 .billing-download-button:disabled, .billing-email-button:disabled { opacity: .55; cursor: wait; }
 .billing-email-status { display: block; margin-top: 5px; color: var(--color-text-subtle); font-size: 8px; }
-.billing-email-status.sent { color: #8dd6b3; }
+.billing-email-status.sent { color: #8edfff; }
 .billing-email-status.failed { color: #ff969c; }
 .billing-email-status.pending { color: #edc987; }
 .billing-actions-cell { min-width: 115px; }

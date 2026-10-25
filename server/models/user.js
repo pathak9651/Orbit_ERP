@@ -16,6 +16,22 @@ const userSchema = new mongoose.Schema({
         lowercase: true,
         trim: true
     },
+    phone: {
+        type: String,
+        trim: true,
+        maxlength: 25,
+        default: ''
+    },
+    dateOfBirth: {
+        type: Date,
+        default: null
+    },
+    // Stores the validated, size-limited profile image as a data URL for this account.
+    profileImage: {
+        type: String,
+        default: '',
+        select: false
+    },
     password: {
         type: String,
         required: true,

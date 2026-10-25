@@ -1,5 +1,6 @@
 import express from 'express';
 import { exportAllDataCsv } from '../controllers/adminExportController.js';
+import { getAdminOverview } from '../controllers/adminOverviewController.js';
 import { createManagedUser, importManagedUsers, importUsersFromGoogleSheet, listUsers, updateManagedUser } from '../controllers/adminUserController.js';
 import { createDepartment, createRole, deleteDepartment, deleteRole, listOrganizationSettings } from '../controllers/organizationController.js';
 import { authenticateToken, authorizeRoles } from '../middlewares/auth.js';
@@ -10,6 +11,7 @@ import {
   getAdminDashboard,
   getCurrentUser,
   updateProfile,
+  updateProfileImage,
   changePassword,
   signIn,
   signOut,
@@ -44,9 +46,11 @@ router.get('/billing/invoices/:id/pdf', authenticateToken, authenticatedApiRateL
 router.post('/billing/invoices/:id/email', authenticateToken, authenticatedApiRateLimiter, authorizeBillingAccess, invoiceEmailRateLimiter, organizationEmailRateLimiter, emailInvoice);
 router.patch('/billing/invoices/:id/status', authenticateToken, authenticatedApiRateLimiter, authorizeBillingAccess, validateBody('invoiceStatus'), updateInvoiceStatus);
 router.patch('/profile', authenticateToken, authenticatedApiRateLimiter, validateBody('profile'), updateProfile);
+router.put('/profile/image', authenticateToken, authenticatedApiRateLimiter, express.raw({ type: ['image/jpeg', 'image/png', 'image/webp'], limit: '1536kb' }), updateProfileImage);
 router.patch('/profile/password', authenticateToken, authenticatedApiRateLimiter, passwordChangeRateLimiter, validateBody('password'), changePassword);
 router.post('/logout', signOut);
 router.get('/admin', authenticateToken, authenticatedApiRateLimiter, authorizeRoles('admin'), getAdminDashboard);
+router.get('/admin/overview', authenticateToken, authenticatedApiRateLimiter, authorizeRoles('admin'), getAdminOverview);
 router.get('/admin/export.csv', authenticateToken, authenticatedApiRateLimiter, authorizeRoles('admin'), exportRateLimiter, exportAllDataCsv);
 router.get('/admin/audit-events', authenticateToken, authenticatedApiRateLimiter, authorizeRoles('admin'), listAuditEvents);
 router.get('/tasks/assignees', authenticateToken, authenticatedApiRateLimiter, authorizeRoles('admin', 'hr', 'manager'), getTaskAssignees);

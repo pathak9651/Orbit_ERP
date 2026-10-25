@@ -2,6 +2,7 @@ import User from '../models/user.js';
 import { recordAuditEvent } from '../services/audit.js';
 import { notifyUsers } from '../services/notifications.js';
 import Role from '../models/role.js';
+import { validateProfileImageUpload } from '../utils/validation.js';
 import {
   clearAuthCookie,
   createAccessToken,
@@ -26,6 +27,8 @@ async function toPublicUser(user) {
     id: user.id,
     accountId: user.accountId,
     name: user.name,
+    phone: user.phone || '',
+    dateOfBirth: user.dateOfBirth ? new Date(user.dateOfBirth).toISOString().slice(0, 10) : '',
     email: user.email,
     role: user.role === 'user' ? 'employee' : user.role,
     roleName,
@@ -33,17 +36,20 @@ async function toPublicUser(user) {
     department: user.department ? { id: user.department.id, name: user.department.name } : null,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
+    profileImage: user.profileImage || '',
   }
 }
 
 /** Validates a registration request and queues its account for administrator approval. */
 export async function signUp(req, res, next) {
   const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+  const phone = typeof req.body?.phone === 'string' ? req.body.phone.trim().replace(/[\s().-]/g, '') : '';
   const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+  const dateOfBirth = typeof req.body?.dateOfBirth === 'string' ? req.body.dateOfBirth : '';
   const password = typeof req.body?.password === 'string' ? req.body.password : '';
 
-  if (!name || !email || !password) {
-    return res.status(400).json({ message: 'Name, email, and password are required.' });
+  if (!name || !phone || !email || !dateOfBirth || !password) {
+    return res.status(400).json({ message: 'Full name, phone number, email, date of birth, and password are required.' });
   }
   if (name.length < 2 || name.length > 80) {
     return res.status(400).json({ message: 'Name must be between 2 and 80 characters.' });
@@ -54,9 +60,14 @@ export async function signUp(req, res, next) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return res.status(400).json({ message: 'Enter a valid email address.' });
   }
+  if (!/^\+?\d{8,15}$/.test(phone)) return res.status(400).json({ message: 'Enter a valid phone number with 8 to 15 digits.' });
+  const birthDate = new Date(`${dateOfBirth}T00:00:00.000Z`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth) || Number.isNaN(birthDate.getTime()) || birthDate.toISOString().slice(0, 10) !== dateOfBirth || dateOfBirth > new Date().toISOString().slice(0, 10)) {
+    return res.status(400).json({ message: 'Enter a valid date of birth that is not in the future.' });
+  }
 
   try {
-    const user = await User.create({ name, email, password: await hashPassword(password), isVerified: false });
+    const user = await User.create({ name, phone, email, dateOfBirth: birthDate, password: await hashPassword(password), isVerified: false });
     const admins = await User.find({ role: 'admin', isVerified: { $ne: false } }).distinct('_id');
     await notifyUsers(admins, {
       type: 'account', title: 'Account approval needed', message: `${name} requested access to Orbit ERP.`,
@@ -80,7 +91,7 @@ export async function signIn(req, res, next) {
   }
 
   try {
-    const user = await User.findOne({ email }).select('+password').populate('department', 'name');
+    const user = await User.findOne({ email }).select('+password +profileImage').populate('department', 'name');
     if (!user || !(await verifyUserPassword(user, password))) {
       await recordAuthAudit(req, { eventType: 'login', outcome: 'failure', targetUser: user?._id || null });
       return res.status(401).json({ message: 'Invalid email or password.' });
@@ -99,13 +110,17 @@ export async function signIn(req, res, next) {
 
 /** Returns the authenticated account in its public response shape. */
 export async function getCurrentUser(req, res) {
-  return res.json({ user: await toPublicUser(req.user) });
+  const user = await User.findById(req.user.id).select('+profileImage').populate('department', 'name');
+  if (!user) return res.status(404).json({ message: 'Account not found.' });
+  return res.json({ user: await toPublicUser(user) });
 }
 
 /** Updates a user's name or email, requiring current-password proof for email changes. */
 export async function updateProfile(req, res, next) {
   const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
   const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+  const phone = typeof req.body?.phone === 'string' ? req.body.phone.trim() : '';
+  const dateOfBirth = typeof req.body?.dateOfBirth === 'string' ? req.body.dateOfBirth : '';
 
   if (name.length < 2 || name.length > 80) {
     return res.status(400).json({ message: 'Name must be between 2 and 80 characters.' });
@@ -113,9 +128,18 @@ export async function updateProfile(req, res, next) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return res.status(400).json({ message: 'Enter a valid email address.' });
   }
+  if (phone && !/^\+?\d{8,15}$/.test(phone.replace(/[\s().-]/g, ''))) {
+    return res.status(400).json({ message: 'Enter a valid phone number with 8 to 15 digits.' });
+  }
+  if (dateOfBirth) {
+    const parsedDate = new Date(`${dateOfBirth}T00:00:00.000Z`);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth) || Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== dateOfBirth || dateOfBirth > new Date().toISOString().slice(0, 10)) {
+      return res.status(400).json({ message: 'Enter a valid date of birth that is not in the future.' });
+    }
+  }
 
   try {
-    const user = await User.findById(req.user.id).select('+password').populate('department', 'name');
+    const user = await User.findById(req.user.id).select('+password +profileImage').populate('department', 'name');
     if (!user) return res.status(404).json({ message: 'Account not found.' });
 
     if (email !== user.email) {
@@ -127,12 +151,32 @@ export async function updateProfile(req, res, next) {
     }
 
     user.name = name;
+    user.phone = phone;
+    user.dateOfBirth = dateOfBirth ? new Date(`${dateOfBirth}T00:00:00.000Z`) : null;
     await user.save();
     return res.json({ user: await toPublicUser(user) });
   } catch (error) {
     if (error.code === 11000) {
       return res.status(409).json({ message: 'An account with that email already exists.' });
     }
+    return next(error);
+  }
+}
+
+/** Validates and stores the signed-in user's profile image using a strict image MIME allowlist. */
+export async function updateProfileImage(req, res, next) {
+  const contentType = String(req.get('content-type') || '').split(';')[0].trim().toLowerCase();
+  const validationMessage = validateProfileImageUpload(req.body, contentType);
+  if (validationMessage) return res.status(400).json({ message: validationMessage });
+
+  try {
+    const user = await User.findById(req.user.id).select('+profileImage').populate('department', 'name');
+    if (!user) return res.status(404).json({ message: 'Account not found.' });
+    user.profileImage = `data:${contentType};base64,${req.body.toString('base64')}`;
+    await user.save();
+    await recordAuthAudit(req, { eventType: 'profile_image_updated', targetUser: user._id });
+    return res.json({ user: await toPublicUser(user), message: 'Profile image updated.' });
+  } catch (error) {
     return next(error);
   }
 }
@@ -150,7 +194,7 @@ export async function changePassword(req, res, next) {
   }
 
   try {
-    const user = await User.findById(req.user.id).select('+password').populate('department', 'name');
+    const user = await User.findById(req.user.id).select('+password +profileImage').populate('department', 'name');
     if (!user) return res.status(404).json({ message: 'Account not found.' });
     if (!(await verifyUserPassword(user, currentPassword))) {
       return res.status(401).json({ message: 'Your current password is incorrect.' });

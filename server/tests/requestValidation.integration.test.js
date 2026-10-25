@@ -25,11 +25,11 @@ test('signup rejects malformed fields before account storage is reached', async 
   const response = await fetch(`${baseUrl}/api/signup`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: 'A', email: 'not-an-email', password: 'small' }),
+    body: JSON.stringify({ name: 'A', phone: '123', email: 'not-an-email', dateOfBirth: '2999-01-01', password: 'small' }),
   })
   const result = await response.json()
   assert.equal(response.status, 400)
-  assert.ok(result.errors.length >= 3)
+  assert.ok(result.errors.length >= 5)
 })
 
 test('malformed JSON receives a client error instead of a server error', async () => {
@@ -65,6 +65,20 @@ test('safe API reads do not use the state-changing Origin guard', async () => {
   const response = await fetch(`${baseUrl}/api/me`, {
     headers: { Origin: 'https://attacker.example' },
   })
+  assert.equal(response.status, 401)
+})
+
+test('profile image uploads require an authenticated session', async () => {
+  const response = await fetch(`${baseUrl}/api/profile/image`, {
+    method: 'PUT',
+    headers: { Origin: 'http://localhost:5173', 'Content-Type': 'image/png' },
+    body: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+  })
+  assert.equal(response.status, 401)
+})
+
+test('company overview is available only to an authenticated administrator', async () => {
+  const response = await fetch(`${baseUrl}/api/admin/overview`)
   assert.equal(response.status, 401)
 })
 

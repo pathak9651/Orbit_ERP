@@ -1,3 +1,6 @@
+import PasswordInput from '../shared/PasswordInput.jsx'
+import orbitLogo from '../../assets/orbit-logo.svg'
+
 /** Presents the shared sign-in and account-request form. */
 export default function AuthScreen({ mode, onModeChange, onSubmit, error, notice, busy, resetToken }) {
   const isSignUp = mode === 'signup'
@@ -10,7 +13,7 @@ export default function AuthScreen({ mode, onModeChange, onSubmit, error, notice
     <main className="auth-layout">
       <section className="auth-story" aria-label="About Orbit ERP">
         <a className="brand" href="#home" aria-label="Orbit ERP home">
-          <span className="brand-mark">o</span><span>orbit<span className="brand-muted">ERP</span></span>
+          <img className="brand-mark" src={orbitLogo} alt="" aria-hidden="true" /><span>orbit<span className="brand-muted">ERP</span></span>
         </a>
         <div className="story-copy">
           <span className="eyebrow">YOUR BUSINESS, IN ORBIT</span>
@@ -24,7 +27,7 @@ export default function AuthScreen({ mode, onModeChange, onSubmit, error, notice
       <section className="auth-panel">
         <div className="auth-card">
           <a className="brand mobile-brand" href="#home" aria-label="Orbit ERP home">
-            <span className="brand-mark">o</span><span>orbit<span className="brand-muted">ERP</span></span>
+            <img className="brand-mark" src={orbitLogo} alt="" aria-hidden="true" /><span>orbit<span className="brand-muted">ERP</span></span>
           </a>
           <span className="eyebrow">{isSignUp ? 'GET STARTED' : isRecovery ? 'ACCOUNT RECOVERY' : 'WELCOME BACK'}</span>
           <h2>{title}</h2>
@@ -33,22 +36,22 @@ export default function AuthScreen({ mode, onModeChange, onSubmit, error, notice
           </p>
 
           <form className="auth-form" onSubmit={onSubmit}>
-            {isSignUp && (
-              <label className="field-label">
-                Your name
-                <input name="name" autoComplete="name" placeholder="Alex Morgan" minLength="2" maxLength="80" required />
-              </label>
-            )}
+            {isSignUp && <>
+              <label className="field-label">Full name<input name="name" autoComplete="name" placeholder="Alex Morgan" minLength="2" maxLength="80" required /></label>
+              <label className="field-label">Phone No.<input name="phone" type="tel" autoComplete="tel" inputMode="tel" placeholder="+1 555 123 4567" minLength="8" maxLength="25" required /></label>
+            </>}
             {!isReset && !isForgot && <label className="field-label">
               Email address
               <input name="email" type="email" autoComplete="email" placeholder="you@company.com" required />
             </label>}
+            {isSignUp && <label className="field-label">Date of birth<input name="dateOfBirth" type="date" autoComplete="bday" max={new Date().toISOString().slice(0, 10)} required /></label>}
             {!isForgot && !isReset && <label className="field-label">
               Password
-              <input name="password" type="password" autoComplete={isSignUp ? 'new-password' : 'current-password'} placeholder="At least 8 characters" minLength={isSignUp ? 8 : undefined} maxLength="72" required />
+              <PasswordInput name="password" autoComplete={isSignUp ? 'new-password' : 'current-password'} placeholder="At least 8 characters" minLength={isSignUp ? 8 : undefined} maxLength="72" required />
             </label>}
+            {isSignUp && <label className="field-label">Confirm password<PasswordInput name="confirmPassword" autoComplete="new-password" placeholder="Re-enter your password" minLength="8" maxLength="72" required /></label>}
             {isForgot && <label className="field-label">Email address<input name="email" type="email" autoComplete="email" required /></label>}
-            {isReset && <><input type="hidden" name="token" value={resetToken || ''} /><label className="field-label">New password<input name="newPassword" type="password" autoComplete="new-password" minLength="8" maxLength="72" required /></label><label className="field-label">Confirm new password<input name="confirmPassword" type="password" autoComplete="new-password" minLength="8" maxLength="72" required /></label></>}
+            {isReset && <><input type="hidden" name="token" value={resetToken || ''} /><label className="field-label">New password<PasswordInput name="newPassword" autoComplete="new-password" minLength="8" maxLength="72" required /></label><label className="field-label">Confirm new password<PasswordInput name="confirmPassword" autoComplete="new-password" minLength="8" maxLength="72" required /></label></>}
 
             {error && <p className="form-error" role="alert">{error}</p>}
             {notice && <p className="auth-notice" role="status">{notice}</p>}

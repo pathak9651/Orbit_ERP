@@ -1,5 +1,15 @@
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i
+const MAX_PROFILE_IMAGE_BYTES = 1_572_864
+
+/** Checks the selected profile image type and size before sending it to the server. */
+export function validateProfileImageFile(file) {
+  if (!file) return 'Choose a profile image to upload.'
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) return 'Choose a JPEG, PNG, or WebP image.'
+  if (file.size <= 0) return 'The selected image is empty.'
+  if (file.size > MAX_PROFILE_IMAGE_BYTES) return 'Profile images must be 1.5 MB or smaller.'
+  return ''
+}
 
 function isPlainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -54,13 +64,27 @@ const schemas = {
   ]),
   forgotPassword: makeSchema(['email'], [(value) => emailError(value.email)]),
   resetPassword: makeSchema(['token', 'newPassword'], [(value) => textError(value.token, 'Reset token', { max: 200 }), (value) => passwordError(value.newPassword, 'New password', { min: 8 })]),
-  signup: makeSchema(['name', 'email', 'password'], [
-    (value) => textError(value.name, 'Name', { min: 2, max: 80 }),
-    (value) => emailError(value.email), (value) => passwordError(value.password, 'Password', { min: 8 }),
+  signup: makeSchema(['name', 'phone', 'email', 'dateOfBirth', 'password', 'confirmPassword'], [
+    (value) => textError(value.name, 'Full name', { min: 2, max: 80 }),
+    (value) => {
+      const error = textError(value.phone, 'Phone number', { min: 8, max: 25 })
+      if (error) return error
+      return /^\+?\d{8,15}$/.test(value.phone.trim().replace(/[\s().-]/g, '')) ? '' : 'Enter a valid phone number with 8 to 15 digits.'
+    },
+    (value) => emailError(value.email),
+    (value) => validDate(value.dateOfBirth) && value.dateOfBirth <= new Date().toISOString().slice(0, 10) ? '' : 'Enter a valid date of birth that is not in the future.',
+    (value) => passwordError(value.password, 'Password', { min: 8 }),
+    (value) => value.confirmPassword === value.password ? '' : 'The passwords do not match.',
   ]),
-  profile: makeSchema(['name', 'email', 'currentPassword'], [
+  profile: makeSchema(['name', 'email', 'phone', 'dateOfBirth', 'currentPassword'], [
     (value) => textError(value.name, 'Name', { min: 2, max: 80 }),
     (value) => emailError(value.email),
+    (value) => {
+      if (value.phone === undefined || value.phone === '') return ''
+      const error = textError(value.phone, 'Phone number', { required: false, max: 25 })
+      return error || (/^\+?\d{8,15}$/.test(value.phone.replace(/[\s().-]/g, '')) ? '' : 'Enter a valid phone number with 8 to 15 digits.')
+    },
+    (value) => value.dateOfBirth === undefined || value.dateOfBirth === '' || (validDate(value.dateOfBirth) && value.dateOfBirth <= new Date().toISOString().slice(0, 10)) ? '' : 'Enter a valid date of birth that is not in the future.',
     (value) => value.currentPassword === undefined ? '' : passwordError(value.currentPassword, 'Current password', { required: false }),
   ]),
   password: makeSchema(['currentPassword', 'newPassword'], [

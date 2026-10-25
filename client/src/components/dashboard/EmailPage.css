@@ -18,7 +18,7 @@
 .email-directory { display: grid; max-height: 310px; overflow-y: auto; border: 1px solid var(--color-border-soft); border-radius: 10px; background: #0e1519; }
 .email-person { display: flex; min-width: 0; align-items: center; gap: 10px; border-bottom: 1px solid var(--color-border-soft); padding: 9px 11px; cursor: pointer; }
 .email-person:last-child { border-bottom: 0; }
-.email-person.is-selected { background: #14231f; }
+.email-person.is-selected { background: #10212b; }
 .email-person > input { accent-color: var(--color-accent-strong); }
 .email-person-copy { display: grid; min-width: 0; gap: 3px; }
 .email-person-copy strong { overflow: hidden; color: var(--color-text); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
@@ -32,7 +32,7 @@
 .email-message-field textarea { resize: vertical; line-height: 1.6; }
 .email-compose-footer { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
 .email-compose-footer > span { color: var(--color-text-subtle); font-size: 9px; }
-.email-success { margin: 0; border: 1px solid #285346; border-radius: 9px; background: #11231e; padding: 10px 13px; color: var(--color-accent); font-size: 11px; }
+.email-success { margin: 0; border: 1px solid #27536a; border-radius: 9px; background: #102331; padding: 10px 13px; color: var(--color-accent); font-size: 11px; }
 .email-feedback { margin: 0; }
 .email-history-list { display: grid; }
 .email-history-item { border-top: 1px solid var(--color-border-soft); }
@@ -42,7 +42,7 @@
 .email-history-main strong { overflow: hidden; color: var(--color-text); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .email-history-main > span { color: var(--color-text-subtle); font-size: 9px; }
 .email-delivery-status { border-radius: 99px; background: #273139; padding: 5px 8px; color: var(--color-text-muted); font-size: 8px; text-transform: capitalize; }
-.email-delivery-status.sent { background: #183a30; color: #8dd6b3; }
+.email-delivery-status.sent { background: #142b3c; color: #8edfff; }
 .email-delivery-status.partial { background: #3b3422; color: #edc987; }
 .email-delivery-status.failed { background: #46282b; color: #ff969c; }
 .email-history-detail { display: grid; gap: 8px; border-top: 1px solid var(--color-border-soft); padding: 12px 2px; }
