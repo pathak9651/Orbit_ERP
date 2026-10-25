@@ -24,6 +24,7 @@ test('Helmet sends security headers and the app-specific CSP', async (context) =
   assert.match(csp, /frame-src https:\/\/maps\.google\.com https:\/\/www\.google\.com/)
   assert.match(csp, /script-src 'self'/)
   assert.doesNotMatch(csp, /unsafe-inline|unsafe-eval/)
-  assert.doesNotMatch(csp, /upgrade-insecure-requests/)
+  if (process.env.NODE_ENV === 'production') assert.match(csp, /upgrade-insecure-requests/)
+  else assert.doesNotMatch(csp, /upgrade-insecure-requests/)
   assert.equal(response.headers.get('strict-transport-security'), null)
 })

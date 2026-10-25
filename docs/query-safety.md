@@ -11,6 +11,10 @@
 
 See [query-audit.md](./query-audit.md) for the reviewed inventory, access boundaries, and remaining risks.
 
+## `strictQuery`
+
+The MongoDB bootstrap sets Mongoose `strictQuery` to `'throw'` outside production and `false` in production. We avoid `true` because stripping an unknown path can turn a restrictive filter into `{}`, which may match every document. Development/test `'throw'` helps reveal misspelled schema paths early; production `false` keeps unknown paths in the filter, where they do not match. This is a query correctness safeguard, not an injection defense: validated request values, server-built filters, and ownership checks remain the primary controls.
+
 ## Sanitization
 
 Request-key sanitization is not enabled. Express 5 is in use, and compatibility and behavior for this application’s legitimate dotted data (including email addresses and nested payloads) have not yet been established. The primary controls are the declarative route validation, existing detailed mutation validators, fixed query construction, and query authorization. Do not add sanitization until its maintained package explicitly supports Express 5 and its body/query behavior is tested against the actual routes.
