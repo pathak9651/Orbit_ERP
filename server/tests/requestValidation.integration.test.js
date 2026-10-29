@@ -43,6 +43,67 @@ test('login rejects unexpected fields before authentication logic runs', async (
   assert.match(result.message, /unexpected body field/i)
 })
 
+test('CRM customer records and imports require an authenticated administrator session', async () => {
+  const listResponse = await fetch(`${baseUrl}/api/admin/customers`)
+  const updateResponse = await fetch(`${baseUrl}/api/admin/customers/64b000000000000000000001`, {
+    method: 'PATCH',
+    headers: { Origin: process.env.CLIENT_ORIGIN?.split(',')[0] || 'http://localhost:5173', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'Jordan Lee', email: 'jordan@example.com' }),
+  })
+  const deleteResponse = await fetch(`${baseUrl}/api/admin/customers/64b000000000000000000001`, {
+    method: 'DELETE',
+    headers: { Origin: process.env.CLIENT_ORIGIN?.split(',')[0] || 'http://localhost:5173' },
+  })
+  const importResponse = await fetch(`${baseUrl}/api/admin/customers/import`, {
+    method: 'POST',
+    headers: { Origin: process.env.CLIENT_ORIGIN || 'http://localhost:5173', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ customers: [{ name: 'Jordan Lee', email: 'jordan@example.com' }] }),
+  })
+  assert.equal(listResponse.status, 401)
+  assert.equal(updateResponse.status, 401)
+  assert.equal(deleteResponse.status, 401)
+  assert.equal(importResponse.status, 401)
+})
+
+test('inventory list and mutation routes require an authenticated administrator session', async () => {
+  const trustedOrigin = process.env.CLIENT_ORIGIN?.split(',')[0] || 'http://localhost:5173'
+  const headers = { Origin: trustedOrigin, 'Content-Type': 'application/json' }
+  const item = { name: 'Printer paper', category: 'Stationery', sku: '', quantity: 10, reorderLevel: 3, unit: 'reams', location: '', supplier: '', description: '' }
+  const responses = await Promise.all([
+    fetch(`${baseUrl}/api/admin/inventory`, { headers }),
+    fetch(`${baseUrl}/api/admin/inventory`, { method: 'POST', headers, body: JSON.stringify(item) }),
+    fetch(`${baseUrl}/api/admin/inventory/64b000000000000000000001`, { method: 'PATCH', headers, body: JSON.stringify(item) }),
+    fetch(`${baseUrl}/api/admin/inventory/64b000000000000000000001`, { method: 'DELETE', headers }),
+  ])
+  assert.deepEqual(responses.map((response) => response.status), [401, 401, 401, 401])
+})
+
+test('user management edit and delete routes require an authenticated administrator session', async () => {
+  const trustedOrigin = process.env.CLIENT_ORIGIN?.split(',')[0] || 'http://localhost:5173'
+  const userId = '64b000000000000000000001'
+  const updateResponse = await fetch(`${baseUrl}/api/admin/users/${userId}`, {
+    method: 'PATCH',
+    headers: { Origin: trustedOrigin, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'Jordan Lee' }),
+  })
+  const deleteResponse = await fetch(`${baseUrl}/api/admin/users/${userId}`, { method: 'DELETE', headers: { Origin: trustedOrigin } })
+  assert.equal(updateResponse.status, 401)
+  assert.equal(deleteResponse.status, 401)
+})
+
+test('impersonation start and stop routes require an authenticated session', async () => {
+  const trustedOrigin = process.env.CLIENT_ORIGIN?.split(',')[0] || 'http://localhost:5173'
+  const userId = '64b000000000000000000001'
+  const startResponse = await fetch(`${baseUrl}/api/admin/users/${userId}/impersonate`, {
+    method: 'POST',
+    headers: { Origin: trustedOrigin, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason: 'Investigate a reported access issue' }),
+  })
+  const stopResponse = await fetch(`${baseUrl}/api/impersonation/stop`, { method: 'POST', headers: { Origin: trustedOrigin } })
+  assert.equal(startResponse.status, 401)
+  assert.equal(stopResponse.status, 401)
+})
+
 test('signup rejects a wrong field type before account storage is reached', async () => {
   const response = await fetch(`${baseUrl}/api/signup`, {
     method: 'POST',
@@ -97,9 +158,62 @@ test('profile image uploads require an authenticated session', async () => {
   assert.equal(response.status, 401)
 })
 
+test('document library, upload, and download require an authenticated session', async () => {
+  const listResponse = await fetch(`${baseUrl}/api/documents`)
+  const viewResponse = await fetch(`${baseUrl}/api/documents/64b000000000000000000001/view`)
+  const uploadResponse = await fetch(`${baseUrl}/api/documents?filename=policy.pdf`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/pdf' },
+    body: Buffer.from('%PDF-1.7'),
+  })
+  const downloadResponse = await fetch(`${baseUrl}/api/documents/64b000000000000000000001/download`)
+
+  assert.equal(listResponse.status, 401)
+  assert.equal(viewResponse.status, 401)
+  assert.equal(uploadResponse.status, 401)
+  assert.equal(downloadResponse.status, 401)
+})
+
+test('office calendar reads and event changes require an authenticated session', async () => {
+  const start = encodeURIComponent('2027-01-01T00:00:00.000Z')
+  const end = encodeURIComponent('2027-02-01T00:00:00.000Z')
+  const listResponse = await fetch(`${baseUrl}/api/calendar/events?start=${start}&end=${end}`)
+  const createResponse = await fetch(`${baseUrl}/api/calendar/events`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+  const updateResponse = await fetch(`${baseUrl}/api/calendar/events/64b000000000000000000001`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+
+  assert.equal(listResponse.status, 401)
+  assert.equal(createResponse.status, 401)
+  assert.equal(updateResponse.status, 401)
+})
+
 test('company overview is available only to an authenticated administrator', async () => {
   const response = await fetch(`${baseUrl}/api/admin/overview`)
   assert.equal(response.status, 401)
+})
+
+test('company analytics reports require an authenticated administrator session', async () => {
+  const response = await fetch(`${baseUrl}/api/admin/reports?period=monthly`)
+  assert.equal(response.status, 401)
+})
+
+test('personal home summary requires an authenticated workspace session', async () => {
+  const response = await fetch(`${baseUrl}/api/home`)
+  assert.equal(response.status, 401)
+})
+
+test('revenue ledger and export routes require an authenticated administrator session', async () => {
+  const trustedOrigin = process.env.CLIENT_ORIGIN?.split(',')[0] || 'http://localhost:5173'
+  const headers = { Origin: trustedOrigin, 'Content-Type': 'application/json' }
+  const transaction = { transactionType: 'income', category: 'Sales', amount: 100, transactionDate: '2026-10-12', status: 'cleared', paymentMethod: 'upi', counterparty: '', reference: '', description: '' }
+  const transactionId = '64b000000000000000000001'
+  const responses = await Promise.all([
+    fetch(`${baseUrl}/api/admin/revenue?period=monthly`),
+    fetch(`${baseUrl}/api/admin/revenue/export.csv?period=monthly`),
+    fetch(`${baseUrl}/api/admin/revenue/transactions`, { method: 'POST', headers, body: JSON.stringify(transaction) }),
+    fetch(`${baseUrl}/api/admin/revenue/transactions/${transactionId}`, { method: 'PATCH', headers, body: JSON.stringify(transaction) }),
+    fetch(`${baseUrl}/api/admin/revenue/transactions/${transactionId}`, { method: 'DELETE', headers: { Origin: trustedOrigin } }),
+  ])
+  assert.deepEqual(responses.map((response) => response.status), [401, 401, 401, 401, 401])
 })
 
 test('chat endpoints require an authenticated account before reading chat data', async () => {

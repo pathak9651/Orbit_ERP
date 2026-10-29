@@ -1,10 +1,15 @@
 /** Coordinates session state, role-based navigation, page rendering, and notification refreshes. */
 import { useEffect, useRef, useState } from 'react'
 import AuthScreen from './components/auth/AuthScreen.jsx'
-import HomePage from './components/dashboard/HomePage.jsx'
+import HomePage from './components/dashboard/DailyHomePage.jsx'
+import AboutPage from './components/dashboard/AboutPage.jsx'
 import AdminOverviewPage from './components/dashboard/AdminOverviewPage.jsx'
+import AdminReportsPage from './components/dashboard/AdminReportsPage.jsx'
+import RevenuePage from './components/dashboard/RevenuePage.jsx'
 import AdminModulePage from './components/dashboard/AdminModulePage.jsx'
 import UserManagementPage from './components/dashboard/UserManagementPage.jsx'
+import CustomerManagementPage from './components/dashboard/CustomerManagementPage.jsx'
+import InventoryManagementPage from './components/dashboard/InventoryManagementPage.jsx'
 import OrganizationSettingsPage from './components/dashboard/OrganizationSettingsPage.jsx'
 import TaskPage from './components/dashboard/TaskPage.jsx'
 import AttendancePage from './components/dashboard/AttendancePage.jsx'
@@ -13,15 +18,17 @@ import EmailPage from './components/dashboard/EmailPage.jsx'
 import BillingPage from './components/dashboard/BillingPage.jsx'
 import AuditEventsPage from './components/dashboard/AuditEventsPage.jsx'
 import ChatPage from './components/dashboard/ChatPage.jsx'
+import DocumentsPage from './components/dashboard/DocumentsPage.jsx'
+import CalendarPage from './components/dashboard/CalendarPage.jsx'
 import LoadingState from './components/common/LoadingState.jsx'
 import ProfilePage from './components/profile/ProfilePage.jsx'
 import Navbar from './components/layout/Navbar.jsx'
 import HorizontalNavbar from './components/layout/HorizontalNavbar.jsx'
 import { canAccessBilling } from './services/permissions.js'
 import { shouldShowOffPageChatNotification } from './services/chat.js'
-import { getCurrentUser, getNotifications, markAllNotificationsRead, markNotificationRead, requestPasswordReset, resetPassword, signIn, signOut, signUp } from './services/api.js'
+import { getCurrentUser, getNotifications, markAllNotificationsRead, markNotificationRead, requestPasswordReset, resetPassword, signIn, signOut, signUp, stopUserImpersonation } from './services/api.js'
 
-const WORKSPACE_PAGES = new Set(['overview', 'users', 'tasks', 'attendance', 'leaves', 'email', 'chat', 'housekeeping', 'billing', 'revenue', 'reports', 'audit', 'organization', 'profile'])
+const WORKSPACE_PAGES = new Set(['overview', 'about', 'users', 'customers', 'tasks', 'attendance', 'leaves', 'email', 'documents', 'calendar', 'chat', 'inventory', 'billing', 'revenue', 'reports', 'audit', 'organization', 'profile'])
 
 /** Restores a known workspace page from the browser URL, defaulting safely to Home. */
 function readWorkspacePageFromUrl() {
@@ -32,13 +39,14 @@ function readWorkspacePageFromUrl() {
 /** Prevents a manually entered URL from exposing a page outside the user's navigation. */
 function canOpenWorkspacePage(user, page) {
   if (user.role === 'admin') return true
-  return ['overview', 'profile', 'tasks', 'attendance', 'leaves', 'email', 'chat'].includes(page)
+  return ['overview', 'about', 'profile', 'tasks', 'attendance', 'leaves', 'email', 'documents', 'calendar', 'chat'].includes(page)
     || (page === 'billing' && canAccessBilling(user))
 }
 
 export default function App() {
   const [authMode, setAuthMode] = useState('login')
   const [user, setUser] = useState(null)
+  const [impersonation, setImpersonation] = useState(null)
   const [currentPage, setCurrentPage] = useState(readWorkspacePageFromUrl)
   const [authError, setAuthError] = useState('')
   const [authNotice, setAuthNotice] = useState('')
@@ -88,9 +96,10 @@ export default function App() {
   useEffect(() => {
     let isMounted = true
     getCurrentUser()
-      .then(({ user: currentUser }) => {
+      .then(({ user: currentUser, impersonation: activeImpersonation }) => {
         if (!isMounted) return
         setUser(currentUser)
+        setImpersonation(activeImpersonation || null)
         setCurrentPage((page) => canOpenWorkspacePage(currentUser, page) ? page : 'overview')
       })
       .catch(() => {})
@@ -146,9 +155,10 @@ export default function App() {
 
     async function refreshUser() {
       try {
-        const { user: refreshedUser } = await getCurrentUser()
+        const { user: refreshedUser, impersonation: activeImpersonation } = await getCurrentUser()
         if (!isActive) return
         setUser(refreshedUser)
+        setImpersonation(activeImpersonation || null)
         setCurrentPage((page) => canOpenWorkspacePage(refreshedUser, page) ? page : 'overview')
       } catch (error) {
         if (!isActive || (error.status !== 401 && error.status !== 403)) return
@@ -156,6 +166,7 @@ export default function App() {
         setNotifications([])
         setUnreadCount(0)
         setHasNewChatMessage(false)
+        setImpersonation(null)
         setCurrentPage('overview')
         setAuthMode('login')
         setAuthError(error.message)
@@ -201,6 +212,7 @@ export default function App() {
         setNotifications([])
         setUnreadCount(0)
         setHasNewChatMessage(false)
+        setImpersonation(null)
         setCurrentPage('overview')
         setUser(result.user)
       } else if (authMode === 'signup') {
@@ -237,9 +249,11 @@ export default function App() {
     try {
       await signOut()
       setUser(null)
+      setImpersonation(null)
       setNotifications([])
       setUnreadCount(0)
       setHasNewChatMessage(false)
+        setImpersonation(null)
       setCurrentPage('overview')
       setAuthMode('login')
     } catch (error) {
@@ -268,6 +282,33 @@ export default function App() {
     try { await markAllNotificationsRead() } catch { /* The next refresh restores the server state if needed. */ }
   }
 
+  function handleImpersonationStart(result) {
+    setNotifications([])
+    setUnreadCount(0)
+    setNotificationPagination(null)
+    setNotificationPage(1)
+    setHasNewChatMessage(false)
+    setUser(result.user)
+    setImpersonation(result.impersonation)
+    setCurrentPage('overview')
+    setAuthError('')
+  }
+
+  async function handleStopImpersonation() {
+    setAuthError('')
+    try {
+      const result = await stopUserImpersonation()
+      setNotifications([])
+      setUnreadCount(0)
+      setNotificationPagination(null)
+      setNotificationPage(1)
+      setHasNewChatMessage(false)
+      setUser(result.user)
+      setImpersonation(null)
+      setCurrentPage('users')
+    } catch (error) { setAuthError(error.message || 'Could not end impersonation.') }
+  }
+
   if (isLoading) {
     return <main className="loading-screen"><LoadingState label="Preparing your Orbit workspace" size="large" /></main>
   }
@@ -289,6 +330,7 @@ export default function App() {
 
   return (
     <div className="workspace-layout">
+      {impersonation && <div className="impersonation-banner" role="status"><div><strong>Viewing as {user.name}</strong><span>Admin {impersonation.administratorName} · {impersonation.reason}</span></div><button className="button button-primary" type="button" onClick={handleStopImpersonation}>Exit user view</button></div>}
       <HorizontalNavbar user={user} onSignOut={handleSignOut} signingOut={isSigningOut} notifications={notifications} unreadCount={unreadCount} pagination={notificationPagination} onNotificationPageChange={setNotificationPage} onOpenNotification={handleNotificationOpen} onMarkAllNotificationsRead={handleMarkAllNotificationsRead} />
       <div className="workspace-shell">
         <Navbar
@@ -296,7 +338,13 @@ export default function App() {
           currentPage={currentPage}
           onNavigate={(page) => { setCurrentPage(page); setAuthError('') }}
         />
-        {currentPage === 'tasks'
+        {currentPage === 'inventory' && user.role === 'admin'
+          ? <InventoryManagementPage />
+          : currentPage === 'customers' && user.role === 'admin'
+          ? <CustomerManagementPage />
+          : currentPage === 'about'
+          ? <AboutPage />
+          : currentPage === 'tasks'
           ? <TaskPage user={user} />
           : currentPage === 'chat'
             ? <ChatPage user={user} />
@@ -306,6 +354,10 @@ export default function App() {
             ? <LeavePage user={user} />
           : currentPage === 'email'
             ? <EmailPage user={user} />
+          : currentPage === 'documents'
+            ? <DocumentsPage user={user} />
+          : currentPage === 'calendar'
+            ? <CalendarPage user={user} />
           : currentPage === 'billing' && canAccessBilling(user)
             ? <BillingPage user={user} />
           : currentPage === 'profile'
@@ -313,14 +365,18 @@ export default function App() {
           : user.role === 'admin' && currentPage === 'audit'
             ? <AuditEventsPage />
           : user.role === 'admin' && currentPage === 'overview'
-            ? <AdminOverviewPage />
+            ? <AdminOverviewPage user={user} onNavigate={(page) => { setCurrentPage(page); setAuthError('') }} />
           : user.role === 'admin' && currentPage === 'users'
-            ? <UserManagementPage currentUserId={user.id} />
+            ? <UserManagementPage currentUserId={user.id} onImpersonationStart={handleImpersonationStart} />
           : user.role === 'admin' && currentPage === 'organization'
             ? <OrganizationSettingsPage />
+          : user.role === 'admin' && currentPage === 'reports'
+            ? <AdminReportsPage />
+          : user.role === 'admin' && currentPage === 'revenue'
+            ? <RevenuePage />
             : user.role === 'admin' && currentPage !== 'overview'
               ? <AdminModulePage section={currentPage} />
-              : <HomePage user={user} message={authError} />}
+              : <HomePage user={user} message={authError} onNavigate={(page) => { setCurrentPage(page); setAuthError('') }} onOpenNotification={handleNotificationOpen} />}
       </div>
       {hasNewChatMessage && currentPage !== 'chat' && <button className="floating-chat-notification" type="button" aria-label="New chat message. Open Team chat" title="New chat message" onClick={() => { setHasNewChatMessage(false); setCurrentPage('chat'); setAuthError('') }}>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H5l1.8-3.6A7.5 7.5 0 1 1 20 11.5Z" /><path d="M8.5 10h7M8.5 13h5" /></svg>

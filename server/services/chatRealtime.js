@@ -1,9 +1,12 @@
+import { createHash } from 'node:crypto'
 import { WebSocketServer, WebSocket } from 'ws'
 import User from '../models/user.js'
+import ImpersonationSession from '../models/impersonationSession.js'
 import ChatConversation from '../models/chatConversation.js'
 import ChatMessage from '../models/chatMessage.js'
+import { recordAuditEvent } from './audit.js'
 import { canAccessDepartmentRoom, getConversationAccessFilter } from './chatAccess.js'
-import { TOKEN_COOKIE, getSessionRejectionReason, verifyAccessToken } from './auth.js'
+import { IMPERSONATION_COOKIE, TOKEN_COOKIE, getSessionRejectionReason, isTokenVersionCurrent, verifyAccessToken } from './auth.js'
 
 const connectedClients = new Map()
 const trustedDevelopmentOrigins = new Set(['http://localhost:5173', 'http://127.0.0.1:5173'])
@@ -44,11 +47,22 @@ export function attachChatWebSocket(server) {
     if (!origin || !isTrustedOrigin(origin)) { socket.write('HTTP/1.1 403 Forbidden\r\n\r\n'); socket.destroy(); return }
 
     try {
-      const token = readCookie(request, TOKEN_COOKIE)
+      const impersonationToken = readCookie(request, IMPERSONATION_COOKIE)
+      const token = impersonationToken || readCookie(request, TOKEN_COOKIE)
       if (!token) throw new Error('missing-session')
       const payload = verifyAccessToken(token)
       const user = await User.findById(payload.sub).select('name email role department isVerified tokenVersion').lean()
       if (getSessionRejectionReason(payload, user)) throw new Error('invalid-session')
+      if (payload.impersonation) {
+        const claims = payload.impersonation
+        const sessionIdHash = createHash('sha256').update(String(claims.sessionId || '')).digest('hex')
+        const [session, administrator] = await Promise.all([
+          ImpersonationSession.findOne({ sessionIdHash, administrator: claims.actorId, targetUser: user._id, revokedAt: null, expiresAt: { $gt: new Date() } }).lean(),
+          User.findById(claims.actorId).select('role isVerified tokenVersion').lean(),
+        ])
+        if (!session || !administrator || administrator.role !== 'admin' || administrator.isVerified === false || !isTokenVersionCurrent({ tokenVersion: claims.actorTokenVersion }, administrator.tokenVersion)) throw new Error('invalid-impersonation')
+        request.chatImpersonation = { actorId: administrator._id, sessionIdHash, actorTokenVersion: claims.actorTokenVersion, reason: session.reason }
+      }
       request.chatUser = user
       request.chatPayload = payload
       webSocketServer.handleUpgrade(request, socket, head, (client) => webSocketServer.emit('connection', client, request))
@@ -67,6 +81,13 @@ export function attachChatWebSocket(server) {
       try {
         const currentUser = await User.findById(userId).select('isVerified tokenVersion').lean()
         if (getSessionRejectionReason(request.chatPayload, currentUser)) socket.close(1008, 'Session expired')
+        if (request.chatImpersonation) {
+          const [session, administrator] = await Promise.all([
+            ImpersonationSession.findOne({ sessionIdHash: request.chatImpersonation.sessionIdHash, revokedAt: null, expiresAt: { $gt: new Date() } }).select('_id').lean(),
+            User.findById(request.chatImpersonation.actorId).select('role isVerified tokenVersion').lean(),
+          ])
+          if (!session || !administrator || administrator.role !== 'admin' || administrator.isVerified === false || !isTokenVersionCurrent({ tokenVersion: request.chatImpersonation.actorTokenVersion }, administrator.tokenVersion)) socket.close(1008, 'Impersonation expired')
+        }
       } catch { socket.close(1011, 'Session check failed') }
     }, 60_000)
     socket.on('close', () => {
@@ -89,6 +110,14 @@ export function attachChatWebSocket(server) {
             { returnDocument: 'after' },
           ).select('sender deliveredTo').lean()
           if (!message) return
+          if (request.chatImpersonation) {
+            await recordAuditEvent({
+              user: request.chatUser,
+              auth: { actorId: request.chatImpersonation.actorId, isImpersonating: true },
+              ip: request.socket.remoteAddress,
+              get: (header) => request.headers[String(header).toLowerCase()],
+            }, { eventType: 'impersonated_action', targetUser: request.chatUser._id, details: { impersonationReason: request.chatImpersonation.reason, requestMethod: 'WS', requestPath: '/api/chat/ws:chat:delivered' } })
+          }
           broadcastChatEvent([message.sender], { type: 'chat:receipt', conversationId: String(conversation._id), messageId: String(event.messageId), recipientId: userId })
           return
         }

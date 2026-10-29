@@ -11,6 +11,12 @@ function localDateKey(date) {
   return `${year}-${month}-${day}`
 }
 
+/** Welcomes the administrator using a short time-of-day greeting. */
+function getGreeting() {
+  const hour = new Date().getHours()
+  return hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
+}
+
 /** Formats invoice amounts using the currency stored by the billing system. */
 function money(value, currency = 'INR') {
   return new Intl.NumberFormat(undefined, { style: 'currency', currency, maximumFractionDigits: 0 }).format(value || 0)
@@ -27,7 +33,7 @@ function OverviewMetric({ label, value, note, tone = 'green' }) {
 }
 
 /** Presents company-wide people, operations, attendance, and billing metrics to administrators. */
-export default function AdminOverviewPage() {
+export default function AdminOverviewPage({ user, onNavigate }) {
   const today = new Date()
   const [filters, setFilters] = useState({ startDate: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`, endDate: localDateKey(today), departmentId: 'all', location: 'all' })
   const [appliedFilters, setAppliedFilters] = useState(filters)
@@ -61,8 +67,13 @@ export default function AdminOverviewPage() {
   return (
     <section className="main-panel" id="overview">
       <main className="dashboard-content admin-overview-content">
+        <section className="admin-home-hero">
+          <div className="admin-home-hero-copy"><span className="daily-overline"><span className="daily-live-dot" /> ORBIT ADMIN WORKSPACE</span><h1>{getGreeting()}, {user?.name?.trim().split(/\s+/)[0] || 'Admin'}<span aria-hidden="true">✦</span></h1><p>Live people, operations, and finance at a glance. Your next decision starts here.</p><div className="admin-home-hero-actions"><button type="button" className="button button-primary" onClick={() => onNavigate?.('users')}>Manage people <span aria-hidden="true">→</span></button><button type="button" className="button button-secondary" onClick={() => onNavigate?.('reports')}>Open reports</button><button type="button" className="button button-secondary" onClick={() => onNavigate?.('revenue')}>Revenue ledger</button></div></div>
+          <div className="admin-home-orbit" aria-hidden="true"><i /><i /><span>O</span><small>CONTROL<br />CENTER</small></div>
+        </section>
+
         <div className="page-heading admin-overview-heading">
-          <div><span className="eyebrow">COMPANY OVERVIEW</span><h1>Company overview</h1><p>Current account status and operational activity for the selected reporting period.</p></div>
+          <div><span className="eyebrow">COMPANY OVERVIEW</span><h2>Company overview</h2><p>Current account status and operational activity for the selected reporting period.</p></div>
           {overview && <span className="overview-timezone">Workplace time: {overview.period.timeZone}</span>}
         </div>
 

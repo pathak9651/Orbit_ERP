@@ -4,6 +4,7 @@ import { connectDB } from './configs/db.js';
 import { closeRateLimitStore, connectRateLimitStore } from './services/rateLimiter.js';
 import { scheduleAttendanceLocationRetention, validateAttendanceLocationConfiguration } from './services/attendanceLocation.js';
 import { attachChatWebSocket } from './services/chatRealtime.js';
+import { scheduleCalendarReminders } from './controllers/calendarController.js';
 
 const PORT = Number(process.env.PORT) || 8000;
 
@@ -18,6 +19,7 @@ async function startServer() {
   console.log('MongoDB connected');
   await connectRateLimitStore();
   await scheduleAttendanceLocationRetention();
+  await scheduleCalendarReminders();
   const server = app.listen(PORT, () => console.log(`Server listening at http://localhost:${PORT}`));
   attachChatWebSocket(server);
 

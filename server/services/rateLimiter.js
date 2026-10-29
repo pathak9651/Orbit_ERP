@@ -91,6 +91,10 @@ export const emailRateLimiter = createRateLimiter({ name: 'email-account', windo
 export const organizationEmailRateLimiter = createRateLimiter({ name: 'email-organization', windowMs: ONE_HOUR, maxRequests: 300, keyGenerator: () => 'organization' })
 /** Caps imported spreadsheet batches per administrator account. */
 export const importRateLimiter = createRateLimiter({ name: 'user-import', windowMs: ONE_HOUR, maxRequests: 10, keyGenerator: (req) => String(req.user?._id || ipKeyGenerator(req.ip)) })
+/** Limits administrator impersonation starts to reduce misuse while preserving support workflows. */
+export const impersonationRateLimiter = createRateLimiter({ name: 'user-impersonation', windowMs: ONE_HOUR, maxRequests: 8, keyGenerator: (req) => String(req.user?._id || ipKeyGenerator(req.ip)), message: 'Too many impersonation sessions were started. Try again later.' })
+/** Limits administrator document uploads to a reasonable number per hour. */
+export const documentUploadRateLimiter = createRateLimiter({ name: 'document-upload', windowMs: ONE_HOUR, maxRequests: 20, keyGenerator: (req) => String(req.user?._id || ipKeyGenerator(req.ip)) })
 /** Limits repeat attempts to create or send invoices per account. */
 export const invoiceEmailRateLimiter = createRateLimiter({ name: 'invoice-email', windowMs: ONE_HOUR, maxRequests: 10, keyGenerator: (req) => String(req.user?._id || ipKeyGenerator(req.ip)) })
 /** Spreads costly full-organization exports apart per administrator, which also prevents concurrent bursts. */

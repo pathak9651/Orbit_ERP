@@ -3,7 +3,9 @@ import jwt from 'jsonwebtoken';
 
 // Shared cookie key ensures sign-in, authentication, and sign-out use the same session token.
 export const TOKEN_COOKIE = 'orbit_token';
+export const IMPERSONATION_COOKIE = 'orbit_impersonation';
 const TOKEN_LIFETIME = '7d';
+const IMPERSONATION_TOKEN_LIFETIME = '15m';
 
 /** Reads the signing secret only when token work is needed and rejects weak configuration. */
 function getJwtSecret() {
@@ -33,10 +35,12 @@ export async function verifyUserPassword(user, password) {
 }
 
 /** Signs the token payload used to identify the authenticated account. */
-export function createAccessToken(user) {
-  return jwt.sign({ role: user.role, tokenVersion: user.tokenVersion ?? 0 }, getJwtSecret(), {
+export function createAccessToken(user, impersonation = null) {
+  const payload = { role: user.role, tokenVersion: user.tokenVersion ?? 0 }
+  if (impersonation) payload.impersonation = impersonation
+  return jwt.sign(payload, getJwtSecret(), {
     subject: user.id,
-    expiresIn: TOKEN_LIFETIME,
+    expiresIn: impersonation ? IMPERSONATION_TOKEN_LIFETIME : TOKEN_LIFETIME,
     algorithm: 'HS256',
   });
 }
@@ -75,10 +79,23 @@ function cookieOptions() {
 /** Stores the JWT in an HTTP-only cookie so browser scripts cannot read it. */
 export function setAuthCookie(res, token) {
   res.cookie(TOKEN_COOKIE, token, cookieOptions());
+  clearImpersonationCookie(res);
 }
 
 /** Removes the session cookie using the same path and security options it was set with. */
 export function clearAuthCookie(res) {
   const { maxAge, ...options } = cookieOptions();
   res.clearCookie(TOKEN_COOKIE, options);
+  clearImpersonationCookie(res);
+}
+
+/** Stores a short-lived impersonation token separately so the administrator session remains available. */
+export function setImpersonationCookie(res, token) {
+  res.cookie(IMPERSONATION_COOKIE, token, { ...cookieOptions(), maxAge: 15 * 60 * 1000 });
+}
+
+/** Clears only the temporary impersonation cookie and preserves the administrator's own session. */
+export function clearImpersonationCookie(res) {
+  const { maxAge, ...options } = cookieOptions();
+  res.clearCookie(IMPERSONATION_COOKIE, options);
 }

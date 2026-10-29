@@ -1,6 +1,17 @@
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i
 const MAX_PROFILE_IMAGE_BYTES = 1_572_864
+const MAX_DOCUMENT_UPLOAD_BYTES = 15 * 1024 * 1024
+const DOCUMENT_FILE_TYPES = {
+  '.pdf': 'application/pdf',
+  '.txt': 'text/plain',
+  '.doc': 'application/msword',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.xls': 'application/vnd.ms-excel',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.ppt': 'application/vnd.ms-powerpoint',
+  '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+}
 export const MAX_SPREADSHEET_BYTES = 5 * 1024 * 1024
 const SPREADSHEET_MIME_TYPES = new Set([
   '',
@@ -35,6 +46,32 @@ export async function validateSpreadsheetFile(file) {
     }
   } catch {
     return 'The selected spreadsheet could not be read.'
+  }
+  return ''
+}
+
+/** Checks supported office/PDF/text document files before an administrator starts an upload. */
+export async function validateDocumentFile(file) {
+  if (!file || typeof file.name !== 'string' || typeof file.slice !== 'function') return 'Choose a document to upload.'
+  if (!file.size) return 'The selected document is empty.'
+  if (file.size > MAX_DOCUMENT_UPLOAD_BYTES) return 'Documents must be 15 MB or smaller.'
+
+  const extension = file.name.toLowerCase().match(/\.[a-z0-9]+$/)?.[0] || ''
+  const expectedType = DOCUMENT_FILE_TYPES[extension]
+  if (!expectedType) return 'Choose a PDF, text, Word, Excel, or PowerPoint document.'
+  if (file.type && file.type !== expectedType) return 'The selected file type does not match its filename.'
+
+  if (extension === '.txt') return ''
+  try {
+    const signature = new Uint8Array(await file.slice(0, 8).arrayBuffer())
+    const pdfSignature = extension === '.pdf' && String.fromCharCode(...signature.slice(0, 5)) === '%PDF-'
+    const legacyOfficeSignature = ['.doc', '.xls', '.ppt'].includes(extension)
+      && [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1].every((byte, index) => signature[index] === byte)
+    const officeOpenXmlSignature = ['.docx', '.xlsx', '.pptx'].includes(extension)
+      && signature[0] === 0x50 && signature[1] === 0x4b && signature[2] === 0x03 && signature[3] === 0x04
+    if (!pdfSignature && !legacyOfficeSignature && !officeOpenXmlSignature) return 'The file contents do not match the selected document type.'
+  } catch {
+    return 'The selected document could not be read.'
   }
   return ''
 }
@@ -126,12 +163,21 @@ const schemas = {
     (value) => value.departmentId === undefined || value.departmentId === null || value.departmentId === '' || (typeof value.departmentId === 'string' && OBJECT_ID_PATTERN.test(value.departmentId)) ? '' : 'Choose a valid department.',
     (value) => value.isVerified === undefined || typeof value.isVerified === 'boolean' ? '' : 'Verification status must be true or false.',
   ]),
-  adminUserUpdate: makeSchema(['role', 'departmentId', 'isVerified'], [
-    (value) => Object.keys(value).length ? '' : 'Choose a role, department, or verification status to update.',
+  adminUserUpdate: makeSchema(['name', 'email', 'phone', 'dateOfBirth', 'role', 'departmentId', 'isVerified'], [
+    (value) => Object.keys(value).length ? '' : 'Choose at least one user detail to update.',
+    (value) => value.name === undefined ? '' : textError(value.name, 'Name', { min: 2, max: 80 }),
+    (value) => value.email === undefined ? '' : emailError(value.email),
+    (value) => {
+      if (value.phone === undefined || value.phone === '') return ''
+      const error = textError(value.phone, 'Phone number', { required: false, max: 25 })
+      return error || (/^\+?\d{8,15}$/.test(value.phone.trim().replace(/[\s().-]/g, '')) ? '' : 'Enter a valid phone number with 8 to 15 digits.')
+    },
+    (value) => value.dateOfBirth === undefined || value.dateOfBirth === '' || (validDate(value.dateOfBirth) && value.dateOfBirth <= new Date().toISOString().slice(0, 10)) ? '' : 'Enter a valid date of birth that is not in the future.',
     (value) => value.role === undefined || (typeof value.role === 'string' && value.role.trim() && value.role.length <= 60) ? '' : 'Choose a valid role.',
     (value) => value.departmentId === undefined || value.departmentId === null || value.departmentId === '' || (typeof value.departmentId === 'string' && OBJECT_ID_PATTERN.test(value.departmentId)) ? '' : 'Choose a valid department.',
     (value) => value.isVerified === undefined || typeof value.isVerified === 'boolean' ? '' : 'Verification status must be true or false.',
   ]),
+  impersonation: makeSchema(['reason'], [(value) => textError(value.reason, 'Impersonation reason', { min: 10, max: 500 })]),
   task: makeSchema(['title', 'description', 'assignedTo', 'dueDate'], [
     (value) => textError(value.title, 'Task title', { min: 3, max: 120 }),
     (value) => value.description === undefined ? '' : textError(value.description, 'Task description', { required: false, max: 2000 }),
@@ -196,6 +242,19 @@ const schemas = {
     (value) => ['reviewed', 'approve-correction', 'reject-correction'].includes(value.decision) ? '' : 'Choose a valid location review action.',
     (value) => textError(value.message, 'Review note', { min: 3, max: 1000 }),
   ]),
+  calendarEvent: makeSchema(['title', 'description', 'type', 'startAt', 'endAt', 'allDay', 'location', 'reminderMinutes'], [
+    (value) => textError(value.title, 'Event title', { min: 2, max: 120 }),
+    (value) => textError(value.description, 'Event description', { required: false, max: 2000 }),
+    (value) => textError(value.location, 'Location', { required: false, max: 200 }),
+    (value) => ['holiday', 'event', 'meeting'].includes(value.type) ? '' : 'Choose a valid calendar event type.',
+    (value) => {
+      const startAt = new Date(value.startAt)
+      const endAt = new Date(value.endAt)
+      return Number.isFinite(startAt.getTime()) && Number.isFinite(endAt.getTime()) && startAt.toISOString() === value.startAt && endAt.toISOString() === value.endAt && endAt > startAt ? '' : 'Enter a valid calendar date and time range.'
+    },
+    (value) => typeof value.allDay === 'boolean' ? '' : 'Choose whether this is an all-day event.',
+    (value) => [0, 5, 15, 30, 60, 1440].includes(value.reminderMinutes) ? '' : 'Choose a valid reminder time.',
+  ]),
   googleSheet: makeSchema(['sheetUrl'], [(value) => {
     const message = textError(value.sheetUrl, 'Google Sheets link', { max: 2048 })
     if (message) return message
@@ -207,6 +266,43 @@ const schemas = {
   userImport: makeSchema(['users'], [
     (value) => Array.isArray(value.users) && value.users.length >= 1 && value.users.length <= 100 ? '' : 'Import between 1 and 100 user rows at a time.',
     (value) => Array.isArray(value.users) && value.users.some((row) => !isPlainObject(row)) ? 'Every spreadsheet row must contain an object of column values.' : '',
+  ]),
+  crmCustomer: makeSchema(['name', 'company', 'email', 'phone', 'address', 'status', 'source', 'notes'], [
+    (value) => textError(value.name, 'Customer name', { min: 2, max: 100 }),
+    (value) => textError(value.company, 'Company', { required: false, max: 120 }),
+    (value) => value.email === undefined || value.email === '' ? '' : typeof value.email === 'string' && EMAIL_PATTERN.test(value.email.trim()) && value.email.length <= 254 ? '' : 'Enter a valid email address.',
+    (value) => textError(value.phone, 'Phone', { required: false, max: 30 }),
+    (value) => textError(value.address, 'Address', { required: false, max: 500 }),
+    (value) => textError(value.source, 'Source', { required: false, max: 80 }),
+    (value) => textError(value.notes, 'Notes', { required: false, max: 2000 }),
+    (value) => ['lead', 'prospect', 'customer', 'inactive'].includes(value.status || 'lead') ? '' : 'Choose a valid customer status.',
+    (value) => value.email?.trim() || value.phone?.trim() ? '' : 'Add an email address or phone number.',
+  ]),
+  crmCustomerImport: makeSchema(['customers'], [
+    (value) => Array.isArray(value.customers) && value.customers.length >= 1 && value.customers.length <= 100 ? '' : 'Import between 1 and 100 customers at a time.',
+    (value) => Array.isArray(value.customers) && value.customers.some((row) => !isPlainObject(row)) ? 'Every spreadsheet row must contain an object of customer details.' : '',
+  ]),
+  inventoryItem: makeSchema(['name', 'category', 'sku', 'quantity', 'reorderLevel', 'unit', 'location', 'supplier', 'description'], [
+    (value) => textError(value.name, 'Item name', { min: 2, max: 120 }),
+    (value) => textError(value.category, 'Category', { min: 2, max: 80 }),
+    (value) => textError(value.sku, 'SKU', { required: false, max: 40 }),
+    (value) => Number.isInteger(value.quantity) && value.quantity >= 0 && value.quantity <= 1000000 ? '' : 'Quantity must be a whole number from 0 to 1,000,000.',
+    (value) => Number.isInteger(value.reorderLevel) && value.reorderLevel >= 0 && value.reorderLevel <= 1000000 ? '' : 'Reorder level must be a whole number from 0 to 1,000,000.',
+    (value) => textError(value.unit, 'Unit', { min: 1, max: 30 }),
+    (value) => textError(value.location, 'Location', { required: false, max: 120 }),
+    (value) => textError(value.supplier, 'Supplier', { required: false, max: 120 }),
+    (value) => textError(value.description, 'Description', { required: false, max: 1000 }),
+  ]),
+  revenueTransaction: makeSchema(['transactionType', 'category', 'amount', 'transactionDate', 'status', 'paymentMethod', 'counterparty', 'reference', 'description'], [
+    (value) => ['income', 'expense', 'refund', 'transfer'].includes(value.transactionType) ? '' : 'Choose income, expense, refund, or transfer as the transaction type.',
+    (value) => textError(value.category, 'Category', { min: 2, max: 60 }),
+    (value) => Number.isFinite(value.amount) && value.amount >= 0.01 && value.amount <= 1000000000000 && Math.round(value.amount * 100) === value.amount * 100 ? '' : 'Enter a valid amount in INR with no more than two decimal places.',
+    (value) => validDate(value.transactionDate) ? '' : 'Enter a valid transaction date.',
+    (value) => ['cleared', 'pending', 'voided'].includes(value.status) ? '' : 'Choose cleared, pending, or voided as the transaction status.',
+    (value) => ['bank-transfer', 'upi', 'card', 'cash', 'cheque', 'other'].includes(value.paymentMethod) ? '' : 'Choose a supported payment method.',
+    (value) => textError(value.counterparty, 'Customer or vendor', { required: false, max: 120 }),
+    (value) => textError(value.reference, 'Reference', { required: false, max: 100 }),
+    (value) => textError(value.description, 'Description', { required: false, max: 1000 }),
   ]),
 }
 

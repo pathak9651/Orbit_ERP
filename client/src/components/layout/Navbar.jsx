@@ -5,10 +5,13 @@ import orbitLogo from '../../assets/orbit-logo.svg'
 // Employee navigation contains only pages available to every signed-in role.
 const userNavigation = [
   { icon: 'HM', label: 'Home', page: 'overview' },
+  { icon: 'AB', label: 'About', page: 'about' },
   { icon: 'TK', label: 'My tasks', page: 'tasks' },
   { icon: 'AT', label: 'Attendance', page: 'attendance' },
   { icon: 'LV', label: 'Leave requests', page: 'leaves' },
   { icon: 'EM', label: 'Email', page: 'email' },
+  { icon: 'DC', label: 'Documents', page: 'documents' },
+  { icon: 'CA', label: 'Office calendar', page: 'calendar' },
   { icon: 'CH', label: 'Team chat', page: 'chat' },
   { icon: 'ME', label: 'Profile', page: 'profile' },
 ]
@@ -16,13 +19,17 @@ const userNavigation = [
 // Administrators receive organization-management pages in addition to shared tools.
 const adminNavigation = [
   { icon: 'HM', label: 'Home', page: 'overview' },
+  { icon: 'AB', label: 'About', page: 'about' },
   { icon: 'US', label: 'User management', page: 'users' },
+  { icon: 'CRM', label: 'CRM customers', page: 'customers' },
   { icon: 'TK', label: 'Task management', page: 'tasks' },
   { icon: 'AT', label: 'Attendance', page: 'attendance' },
   { icon: 'LV', label: 'Leave requests', page: 'leaves' },
   { icon: 'EM', label: 'Email', page: 'email' },
+  { icon: 'DC', label: 'Documents', page: 'documents' },
+  { icon: 'CA', label: 'Office calendar', page: 'calendar' },
   { icon: 'CH', label: 'Team chat', page: 'chat' },
-  { icon: 'HK', label: 'Housekeeping', page: 'housekeeping' },
+  { icon: 'IV', label: 'Inventory management', page: 'inventory' },
   { icon: 'BI', label: 'Bills and invoices', page: 'billing' },
   { icon: 'RV', label: 'Revenue', page: 'revenue' },
   { icon: 'RP', label: 'Reports', page: 'reports' },
@@ -90,6 +97,16 @@ export default function Navbar({ user, currentPage, onNavigate }) {
       </nav>
 
     </aside>
+    {isMobileViewport && isSidebarExpanded && <button
+      className="mobile-sidebar-toggle mobile-sidebar-close-float"
+      type="button"
+      aria-label="Close navigation"
+      aria-expanded="true"
+      aria-controls="workspace-navigation"
+      onClick={() => setIsSidebarExpanded(false)}
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m15 5-7 7 7 7" /></svg>
+    </button>}
     {isMobileViewport && !isSidebarExpanded && <button
       className="mobile-sidebar-toggle mobile-sidebar-open-toggle"
       type="button"

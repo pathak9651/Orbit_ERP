@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react'
 import { readSheet } from 'read-excel-file/browser'
 import Footer from '../layout/Footer.jsx'
 import PasswordInput from '../shared/PasswordInput.jsx'
-import { createAdminUser, downloadAdminDataCsv, getAdminUsers, importAdminUsers, importAdminUsersFromGoogleSheet, updateAdminUser } from '../../services/api.js'
+import { createAdminUser, deleteAdminUser, downloadAdminDataCsv, getAdminUsers, importAdminUsers, importAdminUsersFromGoogleSheet, startUserImpersonation, updateAdminUser } from '../../services/api.js'
 import Pagination from '../common/Pagination.jsx'
 import LoadingState from '../common/LoadingState.jsx'
-import { validateSpreadsheetFile } from '../../services/validation.js'
+import { validateClientForm, validateSpreadsheetFile } from '../../services/validation.js'
 
 /** Formats account creation dates for the administrator's user list. */
 function formatDate(value) {
@@ -14,7 +14,7 @@ function formatDate(value) {
 }
 
 /** Allows administrators to verify accounts and assign roles and departments. */
-export default function UserManagementPage({ currentUserId }) {
+export default function UserManagementPage({ currentUserId, onImpersonationStart }) {
   const [users, setUsers] = useState([])
   const [pagination, setPagination] = useState(null)
   const [page, setPage] = useState(1)
@@ -22,6 +22,8 @@ export default function UserManagementPage({ currentUserId }) {
   const [departments, setDepartments] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [updatingId, setUpdatingId] = useState('')
+  const [editingUserId, setEditingUserId] = useState('')
+  const [userDetailsForm, setUserDetailsForm] = useState({ name: '', email: '', phone: '', dateOfBirth: '' })
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [isExporting, setIsExporting] = useState(false)
@@ -61,6 +63,58 @@ export default function UserManagementPage({ currentUserId }) {
     } finally {
       setUpdatingId('')
     }
+  }
+
+  function startEditingUser(user) {
+    setEditingUserId(user.id)
+    setUserDetailsForm({ name: user.name || '', email: user.email || '', phone: user.phone || '', dateOfBirth: user.dateOfBirth || '' })
+    setError('')
+    setNotice('')
+  }
+
+  async function saveUserDetails(event) {
+    event.preventDefault()
+    const validationMessage = validateClientForm('adminUserUpdate', userDetailsForm)
+    if (validationMessage) { setError(validationMessage); return }
+    const user = users.find((entry) => entry.id === editingUserId)
+    if (!user) return
+    setUpdatingId(user.id); setError(''); setNotice('')
+    try {
+      const result = await updateAdminUser(user.id, userDetailsForm)
+      setUsers((current) => current.map((entry) => entry.id === user.id ? result.user : entry))
+      setEditingUserId('')
+      setNotice(`${result.user.name}'s details were updated.`)
+    } catch (requestError) { setError(requestError.message) }
+    finally { setUpdatingId('') }
+  }
+
+  async function removeUser(user) {
+    if (user.id === currentUserId) return
+    if (!window.confirm(`Delete ${user.name}'s account? This cannot be undone.`)) return
+    setUpdatingId(user.id); setError(''); setNotice('')
+    try {
+      await deleteAdminUser(user.id)
+      setUsers((current) => current.filter((entry) => entry.id !== user.id))
+      setPagination((current) => current ? { ...current, totalItems: Math.max(0, current.totalItems - 1), totalPages: Math.max(1, Math.ceil((current.totalItems - 1) / current.pageSize)) } : current)
+      if (editingUserId === user.id) setEditingUserId('')
+      setNotice(`${user.name}'s account was deleted.`)
+      if (users.length === 1 && page > 1) setPage((current) => current - 1)
+    } catch (requestError) { setError(requestError.message) }
+    finally { setUpdatingId('') }
+  }
+
+  async function impersonateUser(user) {
+    if (user.role === 'admin' || user.id === currentUserId || !user.isVerified) return
+    const reason = window.prompt(`Why are you accessing ${user.name}'s account? This reason will be recorded in the security audit log.`)
+    if (reason === null) return
+    const validationMessage = validateClientForm('impersonation', { reason })
+    if (validationMessage) { setError(validationMessage); return }
+    setUpdatingId(user.id); setError(''); setNotice('')
+    try {
+      const result = await startUserImpersonation(user.id, reason.trim())
+      onImpersonationStart(result)
+    } catch (requestError) { setError(requestError.message) }
+    finally { setUpdatingId('') }
   }
 
   /** Creates an account and adds the returned user to the table immediately. */
@@ -189,6 +243,16 @@ export default function UserManagementPage({ currentUserId }) {
             <ul>{importErrors.map((issue, index) => <li key={`${issue.row}-${index}`}><strong>Row {issue.row}:</strong> {issue.message}</li>)}</ul>
           </section>
         )}
+        {editingUserId && <form className="panel-card admin-user-edit-form" onSubmit={saveUserDetails}>
+          <div className="profile-section-heading"><div><h2>Edit user details</h2><p>Update personal contact details. Role, department, and verification remain available in the user table.</p></div><button className="text-button" type="button" onClick={() => setEditingUserId('')}>Cancel</button></div>
+          <div className="admin-create-user-grid">
+            <label className="field-label">Full name<input value={userDetailsForm.name} onChange={(event) => setUserDetailsForm({ ...userDetailsForm, name: event.target.value })} minLength="2" maxLength="80" required /></label>
+            <label className="field-label">Email address<input type="email" value={userDetailsForm.email} onChange={(event) => setUserDetailsForm({ ...userDetailsForm, email: event.target.value })} maxLength="254" required /></label>
+            <label className="field-label">Phone number<input type="tel" value={userDetailsForm.phone} onChange={(event) => setUserDetailsForm({ ...userDetailsForm, phone: event.target.value })} maxLength="25" /></label>
+            <label className="field-label">Date of birth<input type="date" value={userDetailsForm.dateOfBirth} max={new Date().toISOString().slice(0, 10)} onChange={(event) => setUserDetailsForm({ ...userDetailsForm, dateOfBirth: event.target.value })} /></label>
+          </div>
+          <button className="button button-primary" type="submit" disabled={Boolean(updatingId)}>{updatingId ? 'Saving…' : 'Save user details'}</button>
+        </form>}
         {showBulkImport && (
           <section className="panel-card admin-bulk-import">
             <div className="profile-section-heading">
@@ -262,7 +326,7 @@ export default function UserManagementPage({ currentUserId }) {
                 <thead>
                   <tr>
                     <th scope="col">User</th><th scope="col">Account ID</th><th scope="col">Role</th>
-                    <th scope="col">Department</th><th scope="col">Verification</th><th scope="col">Created</th>
+                    <th scope="col">Department</th><th scope="col">Verification</th><th scope="col">Created</th><th scope="col">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -278,7 +342,7 @@ export default function UserManagementPage({ currentUserId }) {
                       </td>
                       <td>
                         <label className="sr-only" htmlFor={`department-${user.id}`}>Department for {user.name}</label>
-                        <select id={`department-${user.id}`} className="role-select" value={user.department?.id || ''} disabled={Boolean(updatingId)} onChange={(event) => updateUser(user, { departmentId: event.target.value || null })}>
+                        <select id={`department-${user.id}`} className="role-select" value={user.department?.id || ''} disabled={Boolean(updatingId) || user.id === currentUserId} onChange={(event) => updateUser(user, { departmentId: event.target.value || null })}>
                           <option value="">Unassigned</option>
                           {departments.map((department) => <option key={department._id} value={department._id}>{department.name}</option>)}
                         </select>
@@ -291,6 +355,7 @@ export default function UserManagementPage({ currentUserId }) {
                         )}
                       </td>
                       <td>{formatDate(user.createdAt)}</td>
+                      <td><div className="managed-user-actions"><button className="text-button" type="button" onClick={() => startEditingUser(user)} disabled={Boolean(updatingId)}>Edit</button><button className="text-button" type="button" onClick={() => impersonateUser(user)} disabled={Boolean(updatingId) || user.id === currentUserId || user.role === 'admin' || !user.isVerified} title={user.role === 'admin' ? 'Administrator impersonation is disabled.' : !user.isVerified ? 'Only verified accounts can be accessed.' : 'Access this account as the user'}>Access as</button><button className="text-button managed-user-delete" type="button" onClick={() => removeUser(user)} disabled={Boolean(updatingId) || user.id === currentUserId} title={user.id === currentUserId ? 'You cannot delete your own account.' : 'Delete account'}>Delete</button></div></td>
                     </tr>
                   ))}
                 </tbody>

@@ -1,9 +1,11 @@
+import { createHash, randomBytes } from 'node:crypto'
 import Department from '../models/department.js'
+import ImpersonationSession from '../models/impersonationSession.js'
 import Role from '../models/role.js'
 import User from '../models/user.js'
 import { ensureSystemRoles } from './organizationController.js'
 import { notifyUsers } from '../services/notifications.js'
-import { hashPassword } from '../services/auth.js'
+import { clearImpersonationCookie, createAccessToken, hashPassword, setImpersonationCookie } from '../services/auth.js'
 import { recordAuditEvent } from '../services/audit.js'
 import { getPaginationOptions, paginateQuery } from '../utils/pagination.js'
 
@@ -14,6 +16,8 @@ function publicUser(user) {
     accountId: user.accountId,
     name: user.name,
     email: user.email,
+    phone: user.phone || '',
+    dateOfBirth: user.dateOfBirth ? new Date(user.dateOfBirth).toISOString().slice(0, 10) : '',
     role: user.role === 'user' ? 'employee' : user.role,
     isVerified: user.isVerified !== false,
     department: user.department ? { id: user.department.id, name: user.department.name } : null,
@@ -25,6 +29,13 @@ function publicUser(user) {
 /** Rejects malformed database IDs before querying MongoDB. */
 function isValidObjectId(value) {
   return typeof value === 'string' && /^[a-f\d]{24}$/i.test(value)
+}
+
+/** Checks a date-only value without accepting calendar dates that overflow into another month. */
+function isValidDateOnly(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const date = new Date(`${value}T00:00:00.000Z`)
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value
 }
 
 const IMPORT_ROW_LIMIT = 100
@@ -178,7 +189,7 @@ export async function listUsers(req, res, next) {
     const [userPage, roles, departments] = await Promise.all([
       paginateQuery(
         User.find(userFilter)
-        .select('name email role department isVerified createdAt updatedAt')
+        .select('name email phone dateOfBirth role department isVerified createdAt updatedAt')
         .populate('department', 'name')
         .sort({ createdAt: -1 }),
         User.countDocuments(userFilter),
@@ -316,18 +327,22 @@ export async function importUsersFromGoogleSheet(req, res, next) {
 /** Applies administrator verification, role, and department changes with safeguards. */
 export async function updateManagedUser(req, res, next) {
   const { id } = req.params
-  const { role, isVerified, departmentId } = req.body || {}
+  const { name, email, phone, dateOfBirth, role, isVerified, departmentId } = req.body || {}
   if (!isValidObjectId(id)) return res.status(400).json({ message: 'Invalid user ID.' })
-  if (role === undefined && isVerified === undefined && departmentId === undefined) {
-    return res.status(400).json({ message: 'Choose a role, department, or verification status to update.' })
+  if ([name, email, phone, dateOfBirth, role, isVerified, departmentId].every((value) => value === undefined)) {
+    return res.status(400).json({ message: 'Choose at least one user detail to update.' })
   }
+  if (name !== undefined && (typeof name !== 'string' || name.trim().length < 2 || name.trim().length > 80)) return res.status(400).json({ message: 'Name must be between 2 and 80 characters.' })
+  if (email !== undefined && (typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()))) return res.status(400).json({ message: 'Enter a valid email address.' })
+  if (phone !== undefined && (typeof phone !== 'string' || phone.length > 25 || (phone.trim() && !/^\+?\d{8,15}$/.test(phone.trim().replace(/[\s().-]/g, ''))))) return res.status(400).json({ message: 'Enter a valid phone number with 8 to 15 digits.' })
+  if (dateOfBirth !== undefined && dateOfBirth !== '' && (!isValidDateOnly(dateOfBirth) || dateOfBirth > new Date().toISOString().slice(0, 10))) return res.status(400).json({ message: 'Enter a valid date of birth that is not in the future.' })
   if (isVerified !== undefined && typeof isVerified !== 'boolean') {
     return res.status(400).json({ message: 'Verification status must be true or false.' })
   }
   if (departmentId !== undefined && departmentId !== null && !isValidObjectId(departmentId)) {
     return res.status(400).json({ message: 'Choose a valid department.' })
   }
-  if (id === req.user.id && ((role !== undefined && role !== 'admin') || isVerified === false)) {
+  if (id === String(req.user.id || req.user._id) && ((role !== undefined && role !== 'admin') || isVerified === false)) {
     return res.status(400).json({ message: 'You cannot remove your own administrator access or verification.' })
   }
 
@@ -337,6 +352,17 @@ export async function updateManagedUser(req, res, next) {
     const wasVerified = user.isVerified !== false
     const previousRole = user.role
     const previousDepartment = String(user.department || '')
+    const previousEmail = user.email
+
+    if (email !== undefined) {
+      const normalizedEmail = email.trim().toLowerCase()
+      const emailOwner = await User.findOne({ email: normalizedEmail, _id: { $ne: user._id } }).select('_id').lean()
+      if (emailOwner) return res.status(409).json({ message: 'An account with that email already exists.' })
+      user.email = normalizedEmail
+    }
+    if (name !== undefined) user.name = name.trim()
+    if (phone !== undefined) user.phone = phone.trim()
+    if (dateOfBirth !== undefined) user.dateOfBirth = dateOfBirth ? new Date(`${dateOfBirth}T00:00:00.000Z`) : null
 
     if (role !== undefined && !(await Role.exists({ key: role }))) {
       return res.status(400).json({ message: 'Choose a valid ERP role.' })
@@ -355,11 +381,12 @@ export async function updateManagedUser(req, res, next) {
     const roleChanged = role !== undefined && role !== user.role
     const verificationChanged = isVerified !== undefined && isVerified !== wasVerified
     const departmentChanged = departmentId !== undefined && previousDepartment !== String(department?._id || '')
+    const emailChanged = previousEmail !== user.email
 
     if (role !== undefined) user.role = role
     if (isVerified !== undefined) user.isVerified = isVerified
     if (departmentId !== undefined) user.department = department?._id || null
-    if (roleChanged || verificationChanged || departmentChanged) {
+    if (roleChanged || verificationChanged || departmentChanged || emailChanged) {
       user.tokenVersion = (user.tokenVersion ?? 0) + 1
     }
     await user.save()
@@ -369,7 +396,9 @@ export async function updateManagedUser(req, res, next) {
     if (roleChanged) await recordAuditEvent(req, { eventType: 'role_changed', targetUser: user._id, details: { previousRole, newRole: user.role } })
     if (verificationChanged) await recordAuditEvent(req, { eventType: user.isVerified ? 'account_verified' : 'account_suspended', targetUser: user._id, details: { previousVerified: wasVerified, newVerified: user.isVerified } })
     if (departmentChanged) await recordAuditEvent(req, { eventType: 'department_changed', targetUser: user._id, details: { previousDepartment, newDepartment: String(user.department?._id || '') } })
-    if (roleChanged || verificationChanged || departmentChanged) await recordAuditEvent(req, { eventType: 'session_revoked', targetUser: user._id, details: { reason: 'account_access_changed' } })
+    if (emailChanged) await recordAuditEvent(req, { eventType: 'admin_email_changed', targetUser: user._id })
+    if (roleChanged || verificationChanged || departmentChanged || emailChanged) await recordAuditEvent(req, { eventType: 'session_revoked', targetUser: user._id, details: { reason: 'account_access_changed' } })
+    if (name !== undefined || phone !== undefined || dateOfBirth !== undefined) await recordAuditEvent(req, { eventType: 'admin_user_details_updated', targetUser: user._id })
     if (becameVerified || organizationAssignmentChanged) {
       const role = await Role.findOne({ key: user.role }).select('name').lean()
       const details = [role?.name || user.role, user.department?.name].filter(Boolean).join(' · ')
@@ -382,6 +411,65 @@ export async function updateManagedUser(req, res, next) {
     }
     return res.json({ user: publicUser(user) })
   } catch (error) {
+    if (error.code === 11000) return res.status(409).json({ message: 'An account with that email already exists.' })
     return next(error)
   }
+}
+
+/** Deletes an account while protecting the active administrator and the final admin account. */
+export async function deleteManagedUser(req, res, next) {
+  const { id } = req.params
+  if (!isValidObjectId(id)) return res.status(400).json({ message: 'Invalid user ID.' })
+  if (String(id) === String(req.user._id)) return res.status(400).json({ message: 'You cannot delete your own administrator account.' })
+  try {
+    const user = await User.findById(id).select('name role')
+    if (!user) return res.status(404).json({ message: 'User not found.' })
+    if (user.role === 'admin' && await User.countDocuments({ role: 'admin', _id: { $ne: user._id } }) === 0) {
+      return res.status(400).json({ message: 'At least one administrator account must remain.' })
+    }
+    await User.deleteOne({ _id: user._id })
+    await recordAuditEvent(req, { eventType: 'account_deleted', targetUser: user._id })
+    return res.json({ message: `Deleted the account for ${user.name}.`, userId: String(user._id) })
+  } catch (error) { return next(error) }
+}
+
+/** Starts a short-lived, audited session that applies only the selected user's permissions. */
+export async function startUserImpersonation(req, res, next) {
+  const targetId = req.params.id
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : ''
+  if (!isValidObjectId(targetId)) return res.status(400).json({ message: 'Invalid user ID.' })
+  if (reason.length < 10 || reason.length > 500) return res.status(400).json({ message: 'Provide an impersonation reason between 10 and 500 characters.' })
+  try {
+    const target = await User.findById(targetId).populate('department', 'name')
+    if (!target) return res.status(404).json({ message: 'User not found.' })
+    if (target.role === 'admin') return res.status(400).json({ message: 'Administrators cannot impersonate another administrator.' })
+    if (target.isVerified === false) return res.status(400).json({ message: 'Unverified or suspended accounts cannot be impersonated.' })
+    const sessionId = randomBytes(32).toString('base64url')
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000)
+    await ImpersonationSession.create({
+      sessionIdHash: createHash('sha256').update(sessionId).digest('hex'),
+      administrator: req.user._id,
+      targetUser: target._id,
+      reason,
+      expiresAt,
+    })
+    const token = createAccessToken(target, { actorId: String(req.user._id), actorTokenVersion: req.user.tokenVersion ?? 0, sessionId })
+    setImpersonationCookie(res, token)
+    await recordAuditEvent(req, { eventType: 'impersonation_started', targetUser: target._id, details: { impersonationReason: reason } })
+    return res.json({ user: publicUser(target), impersonation: { reason, administratorName: req.user.name, expiresAt } })
+  } catch (error) { return next(error) }
+}
+
+/** Revokes the current temporary session and returns the browser to its preserved admin session. */
+export async function stopUserImpersonation(req, res, next) {
+  if (!req.auth?.isImpersonating) return res.status(400).json({ message: 'There is no active impersonation session.' })
+  try {
+    const sessionIdHash = createHash('sha256').update(req.auth.impersonation.sessionId).digest('hex')
+    await ImpersonationSession.updateOne({ sessionIdHash, revokedAt: null }, { $set: { revokedAt: new Date() } })
+    clearImpersonationCookie(res)
+    await recordAuditEvent(req, { eventType: 'impersonation_ended', targetUser: req.user._id, details: { impersonationReason: req.auth.impersonation.reason } })
+    const administrator = await User.findById(req.auth.actorId).populate('department', 'name')
+    if (!administrator || administrator.role !== 'admin' || administrator.isVerified === false) return res.status(401).json({ message: 'The administrator session is no longer active. Please sign in again.' })
+    return res.json({ user: publicUser(administrator), message: 'Impersonation ended.' })
+  } catch (error) { return next(error) }
 }

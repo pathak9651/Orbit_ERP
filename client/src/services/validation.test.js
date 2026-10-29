@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { validateClientForm, validateProfileImageFile, validateSpreadsheetFile } from './validation.js'
+import { validateClientForm, validateDocumentFile, validateProfileImageFile, validateSpreadsheetFile } from './validation.js'
 import { getChatMessageStatus, shouldShowOffPageChatNotification } from './chat.js'
 
 test('client profile image checks allow supported images and reject unsafe or oversized files', () => {
@@ -35,6 +35,34 @@ test('spreadsheet upload validation rejects incorrect name, type, size, and sign
   assert.match(await validateSpreadsheetFile(createFile({ size: 0 })), /spreadsheet is empty/)
   assert.match(await validateSpreadsheetFile(createFile({ size: 5 * 1024 * 1024 + 1 })), /smaller than 5 MB/)
   assert.match(await validateSpreadsheetFile(createFile({ slice: () => ({ arrayBuffer: async () => Uint8Array.from([0x3c, 0x68, 0x74, 0x6d]).buffer }) })), /not a valid \.xlsx/)
+})
+
+test('document upload validation accepts a PDF and rejects spoofed, oversized, and unsupported files', async () => {
+  const createFile = (overrides = {}) => ({
+    name: 'policy.pdf',
+    type: 'application/pdf',
+    size: 32,
+    slice: () => ({ arrayBuffer: async () => new TextEncoder().encode('%PDF-1.7').buffer }),
+    ...overrides,
+  })
+
+  assert.equal(await validateDocumentFile(createFile()), '')
+  assert.match(await validateDocumentFile(createFile({ name: 'policy.html', type: 'text/html' })), /Choose a PDF, text, Word, Excel, or PowerPoint/)
+  assert.match(await validateDocumentFile(createFile({ type: 'text/html' })), /does not match/)
+  assert.match(await validateDocumentFile(createFile({ slice: () => ({ arrayBuffer: async () => new TextEncoder().encode('<html>').buffer }) })), /contents do not match/)
+  assert.match(await validateDocumentFile(createFile({ size: 15 * 1024 * 1024 + 1 })), /15 MB or smaller/)
+})
+
+test('calendar event validation accepts valid events and rejects invalid time ranges', () => {
+  const event = {
+    title: 'Quarterly planning', description: 'Planning session', type: 'meeting',
+    startAt: '2027-01-12T09:00:00.000Z', endAt: '2027-01-12T10:00:00.000Z',
+    allDay: false, location: 'Office', reminderMinutes: 15,
+  }
+  assert.equal(validateClientForm('calendarEvent', event), '')
+  assert.match(validateClientForm('calendarEvent', { ...event, endAt: event.startAt }), /date and time range/)
+  assert.match(validateClientForm('calendarEvent', { ...event, reminderMinutes: 2 }), /reminder time/)
+  assert.match(validateClientForm('calendarEvent', { ...event, type: 'unknown' }), /event type/)
 })
 
 test('client accepts valid signup fields and rejects weak or malformed values', () => {
@@ -79,6 +107,33 @@ test('client chat validation rejects empty messages and malformed recipient iden
   assert.match(validateClientForm('chatMessage', { body: 'x'.repeat(4001) }), /4000 characters/)
   assert.equal(validateClientForm('chatDirect', { userId: '64b000000000000000000001' }), '')
   assert.match(validateClientForm('chatDepartment', { departmentId: 'bad-id' }), /valid department/)
+})
+
+test('client CRM validation requires a name and an email address or phone', () => {
+  const customer = { name: 'Jordan Lee', company: 'Orbit', email: 'jordan@example.com', phone: '', address: '', status: 'lead', source: '', notes: '' }
+  assert.equal(validateClientForm('crmCustomer', customer), '')
+  assert.match(validateClientForm('crmCustomer', { ...customer, email: '', phone: '' }), /email address or phone/i)
+  assert.match(validateClientForm('crmCustomer', { ...customer, status: 'unknown' }), /valid customer status/i)
+  assert.match(validateClientForm('crmCustomerImport', { customers: Array.from({ length: 101 }, () => customer) }), /1 and 100/i)
+})
+
+test('client revenue validation accepts transactions and rejects invalid money or ledger types', () => {
+  const validTransaction = { transactionType: 'income', category: 'Client payment', amount: 1800.5, transactionDate: '2026-10-12', status: 'cleared', paymentMethod: 'bank-transfer', counterparty: 'Example Ltd', reference: 'INV-100', description: '' }
+  assert.equal(validateClientForm('revenueTransaction', validTransaction), '')
+  assert.match(validateClientForm('revenueTransaction', { ...validTransaction, transactionType: 'unknown' }), /choose income, expense, refund, or transfer/i)
+  assert.match(validateClientForm('revenueTransaction', { ...validTransaction, amount: 10.001 }), /no more than two decimal places/i)
+})
+
+test('client admin user update validation accepts personal detail edits and rejects invalid values', () => {
+  assert.equal(validateClientForm('adminUserUpdate', { name: 'Jordan Lee', email: 'jordan@example.com', phone: '+1 555 123 4567', dateOfBirth: '1990-01-10' }), '')
+  assert.match(validateClientForm('adminUserUpdate', { name: 'J', email: 'bad-email' }), /name must|valid email/i)
+  assert.match(validateClientForm('adminUserUpdate', { phone: '12' }), /phone number/i)
+  assert.match(validateClientForm('adminUserUpdate', {}), /at least one user detail/i)
+})
+
+test('impersonation requires an explanatory support reason', () => {
+  assert.equal(validateClientForm('impersonation', { reason: 'Reproduce reported access issue' }), '')
+  assert.match(validateClientForm('impersonation', { reason: 'help' }), /10 characters/i)
 })
 
 test('chat message ticks advance from sent to delivered to seen', () => {

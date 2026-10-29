@@ -6,6 +6,7 @@ function requestValidationSchema(path, method) {
   const exactRoutes = {
     'POST /api/login': 'login', 'POST /api/signup': 'signup',
     'POST /api/forgot-password': 'forgotPassword', 'POST /api/reset-password': 'resetPassword',
+    'POST /api/calendar/events': 'calendarEvent',
     'PATCH /api/profile': 'profile', 'PATCH /api/profile/password': 'password',
     'POST /api/mail/send': 'email', 'POST /api/billing/invoices': 'invoice',
     'POST /api/tasks': 'task', 'POST /api/leaves': 'leave',
@@ -14,18 +15,28 @@ function requestValidationSchema(path, method) {
     'PATCH /api/attendance/location-review': 'locationReview',
     'POST /api/admin/users': 'adminUser', 'POST /api/admin/users/import': 'userImport',
     'POST /api/admin/users/import/google-sheet': 'googleSheet',
+    'POST /api/admin/customers': 'crmCustomer', 'PATCH /api/admin/customers/:id': 'crmCustomer',
+    'POST /api/admin/customers/import': 'crmCustomerImport',
+    'POST /api/admin/inventory': 'inventoryItem', 'PATCH /api/admin/inventory/:id': 'inventoryItem',
+    'POST /api/admin/revenue/transactions': 'revenueTransaction', 'PATCH /api/admin/revenue/transactions/:id': 'revenueTransaction',
+    'POST /api/admin/users/:id/impersonate': 'impersonation',
     'POST /api/admin/roles': 'organizationRole', 'POST /api/admin/departments': 'organizationDepartment',
     'POST /api/chat/direct': 'chatDirect', 'POST /api/chat/department': 'chatDepartment',
   }
   const routeKey = `${method.toUpperCase()} ${route}`
   if (exactRoutes[routeKey]) return exactRoutes[routeKey]
   if (method.toUpperCase() === 'PATCH' && /^\/api\/admin\/users\/[^/]+$/.test(route)) return 'adminUserUpdate'
+  if (method.toUpperCase() === 'POST' && /^\/api\/admin\/users\/[^/]+\/impersonate$/.test(route)) return 'impersonation'
+  if (method.toUpperCase() === 'PATCH' && /^\/api\/admin\/customers\/[^/]+$/.test(route)) return 'crmCustomer'
+  if (method.toUpperCase() === 'PATCH' && /^\/api\/admin\/inventory\/[^/]+$/.test(route)) return 'inventoryItem'
+  if (method.toUpperCase() === 'PATCH' && /^\/api\/admin\/revenue\/transactions\/[^/]+$/.test(route)) return 'revenueTransaction'
   if (method.toUpperCase() === 'PATCH' && /^\/api\/tasks\/[^/]+\/status$/.test(route)) return 'taskStatus'
   if (method.toUpperCase() === 'PATCH' && /^\/api\/leaves\/[^/]+\/action$/.test(route)) return 'leaveAction'
   if (method.toUpperCase() === 'PATCH' && /^\/api\/billing\/invoices\/[^/]+\/status$/.test(route)) return 'invoiceStatus'
   if (method.toUpperCase() === 'POST' && /^\/api\/attendance\/[^/]+\/location-correction$/.test(route)) return 'locationCorrection'
   if (method.toUpperCase() === 'PATCH' && /^\/api\/attendance\/[^/]+\/location-review$/.test(route)) return 'locationReview'
   if (method.toUpperCase() === 'POST' && /^\/api\/chat\/conversations\/[^/]+\/messages$/.test(route)) return 'chatMessage'
+  if (method.toUpperCase() === 'PATCH' && /^\/api\/calendar\/events\/[^/]+$/.test(route)) return 'calendarEvent'
   return ''
 }
 
@@ -77,14 +88,145 @@ export function getCurrentUser() {
   return request('/api/me')
 }
 
+/** Loads a privacy-scoped daily summary for the signed-in user's home dashboard. */
+export function getHomeSummary() {
+  return request('/api/home')
+}
+
 /** Loads date, department, and attendance-location filtered company metrics for administrators. */
 export function getAdminOverview(parameters) {
   return request(withQuery('/api/admin/overview', parameters))
 }
 
+/** Loads aggregate, period-based company reports for administrator dashboards. */
+export function getAdminReports(parameters) {
+  return request(withQuery('/api/admin/reports', parameters))
+}
+
+/** Loads the paginated revenue ledger, selected-period totals, and transaction trend. */
+export function getRevenue(parameters) {
+  return request(withQuery('/api/admin/revenue', parameters))
+}
+
+/** Creates an admin-entered income, expense, refund, or transfer ledger entry. */
+export function createRevenueTransaction(details) {
+  return request('/api/admin/revenue/transactions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(details) })
+}
+
+/** Updates a revenue ledger entry using server and client validation. */
+export function updateRevenueTransaction(id, details) {
+  return request(`/api/admin/revenue/transactions/${encodeURIComponent(id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(details) })
+}
+
+/** Deletes an admin-managed ledger entry. */
+export function deleteRevenueTransaction(id) {
+  return request(`/api/admin/revenue/transactions/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+/** Downloads a date-scoped, formula-safe revenue ledger CSV. */
+export async function downloadRevenueCsv(parameters) {
+  const response = await fetch(withQuery('/api/admin/revenue/export.csv', parameters), { credentials: 'include' })
+  if (!response.ok) {
+    const result = await response.json().catch(() => ({}))
+    throw new Error(result.message || 'Could not export revenue transactions.')
+  }
+  const objectUrl = URL.createObjectURL(await response.blob())
+  const link = document.createElement('a')
+  link.href = objectUrl
+  link.download = 'orbit-revenue-transactions.csv'
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
+}
+
+/** Loads searchable office stock with summary counts and server-side pagination. */
+export function getInventory(parameters) {
+  return request(withQuery('/api/admin/inventory', parameters))
+}
+
+/** Creates an inventory record through the admin-only API. */
+export function createInventoryItem(details) {
+  return request('/api/admin/inventory', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(details) })
+}
+
+/** Updates inventory details through the admin-only API. */
+export function updateInventoryItem(id, details) {
+  return request(`/api/admin/inventory/${encodeURIComponent(id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(details) })
+}
+
+/** Deletes an inventory record through the admin-only API. */
+export function deleteInventoryItem(id) {
+  return request(`/api/admin/inventory/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
 /** Loads the current user's notification feed and unread count. */
 export function getNotifications(parameters) {
   return request(withQuery('/api/notifications', parameters))
+}
+
+/** Loads one server-paginated page of shared company documents. */
+export function getDocuments(parameters) {
+  return request(withQuery('/api/documents', parameters))
+}
+
+/** Loads events for a month or date interval through the server-side calendar pagination API. */
+export function getCalendarEvents(parameters) {
+  return request(withQuery('/api/calendar/events', parameters))
+}
+
+/** Creates an administrator-managed calendar entry or an HR-scheduled meeting. */
+export function createCalendarEvent(details) {
+  return request('/api/calendar/events', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(details) })
+}
+
+/** Updates an event; the server limits this action to administrators. */
+export function updateCalendarEvent(id, details) {
+  return request(`/api/calendar/events/${encodeURIComponent(id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(details) })
+}
+
+/** Deletes an event; the server limits this action to administrators. */
+export function deleteCalendarEvent(id) {
+  return request(`/api/calendar/events/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+/** Sends a selected document to the administrator-only upload endpoint. */
+export function uploadDocument(file, description = '') {
+  const parameters = new URLSearchParams({ filename: file.name, description })
+  const extension = file.name.toLowerCase().match(/\.[a-z0-9]+$/)?.[0] || ''
+  const contentType = file.type || ({ '.pdf': 'application/pdf', '.txt': 'text/plain', '.doc': 'application/msword', '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', '.xls': 'application/vnd.ms-excel', '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', '.ppt': 'application/vnd.ms-powerpoint', '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation' }[extension])
+  return request(`/api/documents?${parameters.toString()}`, {
+    method: 'POST',
+    headers: { 'Content-Type': contentType || 'application/octet-stream' },
+    body: file,
+  })
+}
+
+/** Downloads a private document through the authenticated document endpoint. */
+export async function downloadDocumentFile(documentRecord) {
+  const response = await fetch(`/api/documents/${encodeURIComponent(documentRecord.id)}/download`, { credentials: 'include' })
+  if (!response.ok) {
+    const result = await response.json().catch(() => ({}))
+    throw new Error(result.message || 'Could not download this document.')
+  }
+  const url = URL.createObjectURL(await response.blob())
+  const link = document.createElement('a')
+  link.href = url
+  link.download = documentRecord.originalName
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+/** Retrieves a read-only browser preview without using the administrator download endpoint. */
+export async function viewDocumentFile(documentRecord) {
+  const response = await fetch(`/api/documents/${encodeURIComponent(documentRecord.id)}/view`, { credentials: 'include' })
+  if (!response.ok) {
+    const result = await response.json().catch(() => ({}))
+    throw new Error(result.message || 'Could not open this document.')
+  }
+  return response.blob()
 }
 
 /** Loads the signed-in user's paginated chat list. */
@@ -265,6 +407,46 @@ export function getAdminUsers(parameters) {
   return request(withQuery('/api/admin/users', parameters))
 }
 
+/** Loads one server-paginated page of administrator CRM customer records. */
+export function getAdminCustomers(parameters) { return request(withQuery('/api/admin/customers', parameters)) }
+
+/** Creates one CRM customer record from the administrator's form. */
+export function createAdminCustomer(details) {
+  return request('/api/admin/customers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(details) })
+}
+
+/** Replaces editable CRM contact and relationship fields for an existing customer. */
+export function updateAdminCustomer(id, details) {
+  return request(`/api/admin/customers/${encodeURIComponent(id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(details) })
+}
+
+/** Deletes one customer record through the administrator-only CRM route. */
+export function deleteAdminCustomer(id) {
+  return request(`/api/admin/customers/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+/** Sends a capped spreadsheet batch to the administrator-only customer import route. */
+export function importAdminCustomers(customers) {
+  return request('/api/admin/customers/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customers }) })
+}
+
+/** Downloads CRM customer records as a CSV through the current cookie session. */
+export async function downloadAdminCustomersCsv() {
+  const response = await fetch('/api/admin/customers/export.csv', { credentials: 'include' })
+  if (!response.ok) {
+    const result = await response.json().catch(() => ({}))
+    throw new Error(result.message || 'Could not export CRM customers.')
+  }
+  const fileUrl = URL.createObjectURL(await response.blob())
+  const downloadLink = document.createElement('a')
+  downloadLink.href = fileUrl
+  downloadLink.download = `orbit-crm-customers-${new Date().toISOString().slice(0, 10)}.csv`
+  document.body.appendChild(downloadLink)
+  downloadLink.click()
+  downloadLink.remove()
+  window.setTimeout(() => URL.revokeObjectURL(fileUrl), 1000)
+}
+
 /** Loads the read-only, paginated audit feed available to administrators. */
 export function getAuditEvents(parameters) { return request(withQuery('/api/admin/audit-events', parameters)) }
 
@@ -319,6 +501,21 @@ export function updateAdminUser(id, updates) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(updates),
   })
+}
+
+/** Permanently deletes one account through the admin-only user management route. */
+export function deleteAdminUser(id) {
+  return request(`/api/admin/users/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+/** Starts a short-lived user view after the administrator supplies a support reason. */
+export function startUserImpersonation(id, reason) {
+  return request(`/api/admin/users/${encodeURIComponent(id)}/impersonate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }) })
+}
+
+/** Ends the active impersonation cookie and restores the preserved administrator session. */
+export function stopUserImpersonation() {
+  return request('/api/impersonation/stop', { method: 'POST' })
 }
 
 export function getAdminOrganization() {

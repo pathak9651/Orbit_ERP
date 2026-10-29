@@ -17,10 +17,10 @@ const sections = {
     description: 'Review attendance records and monitor team schedules.',
     next: 'Attendance records, check-in workflows, and summaries.',
   },
-  housekeeping: {
-    title: 'Housekeeping management',
-    description: 'Coordinate housekeeping work and monitor service requests.',
-    next: 'Housekeeping assignments and completion tracking.',
+  inventory: {
+    title: 'Inventory management',
+    description: 'Track office stock, locations, availability, and reorder needs.',
+    next: 'Office inventory, low-stock alerts, and stock updates.',
   },
   billing: {
     title: 'Bills and invoices',

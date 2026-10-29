@@ -31,7 +31,7 @@ export default function NotificationBell({ notifications, unreadCount, paginatio
       <header className="notification-panel-heading"><div><strong>Notifications</strong><span>{unreadCount ? `${unreadCount} unread` : 'All caught up'}</span></div><button type="button" onClick={onMarkAll} disabled={!unreadCount}>Mark all read</button></header>
       <div className="notification-list">
         {notifications.length ? notifications.map((notification) => <button className={`notification-item ${notification.readAt ? '' : 'is-unread'}`} key={notification.id} type="button" onClick={() => openNotification(notification)}>
-          <span className={`notification-type-icon type-${notification.type}`} aria-hidden="true">{({ task: 'T', email: '@', attendance: 'A', account: 'U', leave: 'L', system: '•' })[notification.type] || '•'}</span>
+          <span className={`notification-type-icon type-${notification.type}`} aria-hidden="true">{({ task: 'T', email: '@', attendance: 'A', account: 'U', leave: 'L', inventory: 'I', system: '•' })[notification.type] || '•'}</span>
           <span className="notification-item-copy"><strong>{notification.title}</strong><span>{notification.message}</span><time dateTime={notification.createdAt}>{timeAgo(notification.createdAt)}</time></span>
           {!notification.readAt && <span className="notification-unread-dot" aria-label="Unread" />}
         </button>) : <p className="notification-empty">No notifications yet. Updates about your work will appear here.</p>}

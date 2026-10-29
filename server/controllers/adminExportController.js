@@ -1,8 +1,11 @@
 import Attendance from '../models/attendance.js'
 import AuditEvent from '../models/auditEvent.js'
 import Department from '../models/department.js'
+import Customer from '../models/customer.js'
 import EmailLog from '../models/emailLog.js'
 import Invoice from '../models/invoice.js'
+import InventoryItem from '../models/inventoryItem.js'
+import RevenueTransaction from '../models/revenueTransaction.js'
 import LeaveRequest from '../models/leaveRequest.js'
 import Notification from '../models/notification.js'
 import Role from '../models/role.js'
@@ -19,12 +22,15 @@ function serializeRecordDetails(record) {
 /** Downloads all ERP collections as one admin-only CSV without exporting password hashes. */
 export async function exportAllDataCsv(req, res, next) {
   try {
-    const [users, tasks, attendance, leaveRequests, invoices, emailLogs, notifications, roles, departments, auditEvents] = await Promise.all([
+    const [users, tasks, attendance, leaveRequests, invoices, inventoryItems, revenueTransactions, customers, emailLogs, notifications, roles, departments, auditEvents] = await Promise.all([
       User.find().select('-password').lean(),
       Task.find().lean(),
       Attendance.find().lean(),
       LeaveRequest.find().lean(),
       Invoice.find().lean(),
+      InventoryItem.find().lean(),
+      RevenueTransaction.find().lean(),
+      Customer.find().lean(),
       EmailLog.find().lean(),
       Notification.find().lean(),
       Role.find().lean(),
@@ -38,6 +44,9 @@ export async function exportAllDataCsv(req, res, next) {
       ['attendance', attendance],
       ['leave_request', leaveRequests],
       ['invoice', invoices],
+      ['inventory_item', inventoryItems],
+      ['revenue_transaction', revenueTransactions],
+      ['customer', customers],
       ['email_log', emailLogs],
       ['notification', notifications],
       ['role', roles],

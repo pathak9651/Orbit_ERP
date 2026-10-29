@@ -1,4 +1,6 @@
+import { createHash } from 'node:crypto';
 import User from '../models/user.js';
+import ImpersonationSession from '../models/impersonationSession.js';
 import { recordAuditEvent } from '../services/audit.js';
 import { notifyUsers } from '../services/notifications.js';
 import Role from '../models/role.js';
@@ -9,6 +11,7 @@ import {
   hashPassword,
   setAuthCookie,
   TOKEN_COOKIE,
+  IMPERSONATION_COOKIE,
   verifyAccessToken,
   verifyUserPassword,
 } from '../services/auth.js';
@@ -154,7 +157,7 @@ export async function signIn(req, res, next) {
 export async function getCurrentUser(req, res) {
   const user = await User.findById(req.user.id).select('+profileImage').populate('department', 'name');
   if (!user) return res.status(404).json({ message: 'Account not found.' });
-  return res.json({ user: await toPublicUser(user) });
+  return res.json({ user: await toPublicUser(user), impersonation: req.auth?.impersonation ? { ...req.auth.impersonation, sessionId: undefined } : null });
 }
 
 /** Updates a user's name or email, requiring current-password proof for email changes. */
@@ -262,6 +265,7 @@ export async function signOut(req, res, next) {
   const authorization = req.get('authorization');
   const bearer = authorization?.startsWith('Bearer ') ? authorization.slice(7) : null;
   const token = req.cookies?.[TOKEN_COOKIE] || bearer;
+  const impersonationToken = req.cookies?.[IMPERSONATION_COOKIE];
   let payload = null;
 
   if (token) {
@@ -275,6 +279,23 @@ export async function signOut(req, res, next) {
   }
 
   try {
+    if (impersonationToken) {
+      let impersonationPayload = null
+      try { impersonationPayload = verifyAccessToken(impersonationToken) }
+      catch (error) {
+        if (error.name !== 'JsonWebTokenError' && error.name !== 'TokenExpiredError') throw error
+      }
+      if (impersonationPayload?.impersonation?.sessionId) {
+        const claims = impersonationPayload.impersonation
+        await ImpersonationSession.updateOne(
+          { sessionIdHash: createHash('sha256').update(claims.sessionId).digest('hex'), revokedAt: null },
+          { $set: { revokedAt: new Date() } },
+        )
+        req.user = { _id: impersonationPayload.sub }
+        req.auth = { actorId: claims.actorId, isImpersonating: true }
+        await recordAuthAudit(req, { eventType: 'impersonation_ended', targetUser: impersonationPayload.sub, details: { reason: 'signed_out' } })
+      }
+    }
     // Only a signed token can identify the account whose outstanding sessions are revoked.
     if (payload?.sub) {
       await User.updateOne({ _id: payload.sub }, { $inc: { tokenVersion: 1 } });

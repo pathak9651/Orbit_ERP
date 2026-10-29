@@ -1,10 +1,7 @@
-// These elevated roles and the Accounts department are permitted to manage invoices.
-const elevatedBillingRoles = new Set(['admin', 'hr', 'manager', 'accountant'])
+import { hasPermission } from '../configs/authorization.js'
 
-/** Allows billing roles or Accounts department members to continue to invoice routes. */
+/** Delegates invoice access to the central role and Accounts department policy. */
 export function authorizeBillingAccess(req, res, next) {
-  const departmentName = typeof req.user?.department?.name === 'string' ? req.user.department.name : ''
-  const isAccountsDepartment = /account/i.test(departmentName)
-  if (elevatedBillingRoles.has(req.user?.role) || isAccountsDepartment) return next()
+  if (hasPermission(req.user, 'billing.manage')) return next()
   return res.status(403).json({ message: 'Billing is available to admins, HR, managers, accountants, and Accounts department staff.' })
 }

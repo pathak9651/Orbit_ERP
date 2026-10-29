@@ -4,6 +4,7 @@ import Department from '../models/department.js'
 import { sendWorkspaceEmail } from '../services/mailer.js'
 import { notifyUsers } from '../services/notifications.js'
 import { getPaginationOptions, paginateQuery } from '../utils/pagination.js'
+import { hasPermission } from '../configs/authorization.js'
 
 // Bound each group message to keep delivery time and mail-provider load predictable.
 const EMAIL_LIMIT = 200
@@ -88,7 +89,7 @@ export async function sendEmail(req, res, next) {
 /** Returns the signed-in user's recent sent-message history. */
 export async function listSentEmails(req, res, next) {
   try {
-    const filter = req.user.role === 'admin' ? {} : { sender: req.user._id }
+    const filter = hasPermission(req.user, 'email.viewAllHistory') ? {} : { sender: req.user._id }
     const result = await paginateQuery(EmailLog.find(filter).populate('sender', 'name email role').sort({ createdAt: -1 }).lean(), EmailLog.countDocuments(filter), getPaginationOptions(req.query))
     return res.json({ emails: result.items.map((item) => ({
       id: String(item._id), subject: item.subject, message: item.message, status: item.status,

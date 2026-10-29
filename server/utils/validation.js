@@ -2,6 +2,17 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 export const MAX_PROFILE_IMAGE_BYTES = 1_572_864
+export const MAX_DOCUMENT_UPLOAD_BYTES = 15 * 1024 * 1024
+export const DOCUMENT_UPLOAD_TYPES = Object.freeze({
+  '.pdf': 'application/pdf',
+  '.txt': 'text/plain',
+  '.doc': 'application/msword',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.xls': 'application/vnd.ms-excel',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.ppt': 'application/vnd.ms-powerpoint',
+  '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+})
 const errorsWithoutRepeatedUnknownFieldScan = new WeakSet()
 
 /** Confirms an uploaded profile image is small and its declared type matches its binary signature. */
@@ -18,6 +29,35 @@ export function validateProfileImageUpload(imageBuffer, contentType) {
         : ''
 
   if (!detectedType || detectedType !== contentType) return 'Upload a valid JPEG, PNG, or WebP image.'
+  return ''
+}
+
+/** Checks document size, allowed extension/type pairs, and basic file signatures before private storage. */
+export function validateDocumentUpload(fileBuffer, contentType, originalName) {
+  if (!Buffer.isBuffer(fileBuffer) || fileBuffer.length === 0) return 'Choose a document to upload.'
+  if (fileBuffer.length > MAX_DOCUMENT_UPLOAD_BYTES) return 'Documents must be 15 MB or smaller.'
+  if (typeof originalName !== 'string' || !originalName.trim() || originalName.length > 180 || /[\\/\u0000-\u001f\u007f]/.test(originalName)) {
+    return 'Enter a valid document filename.'
+  }
+
+  const extension = originalName.toLowerCase().match(/\.[a-z0-9]+$/)?.[0] || ''
+  const expectedType = DOCUMENT_UPLOAD_TYPES[extension]
+  if (!expectedType || expectedType !== contentType) return 'Choose a supported PDF, text, Word, Excel, or PowerPoint document.'
+
+  const isPdf = extension === '.pdf' && fileBuffer.subarray(0, 5).toString('ascii') === '%PDF-'
+  const isLegacyOffice = ['.doc', '.xls', '.ppt'].includes(extension)
+    && fileBuffer.subarray(0, 8).equals(Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]))
+  const isOfficeOpenXml = ['.docx', '.xlsx', '.pptx'].includes(extension)
+    && fileBuffer.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]))
+  let isUtf8Text = false
+  if (extension === '.txt') {
+    try {
+      new TextDecoder('utf-8', { fatal: true }).decode(fileBuffer)
+      isUtf8Text = true
+    } catch { /* Invalid text encodings must not be stored as plain text documents. */ }
+  }
+
+  if (!isPdf && !isLegacyOffice && !isOfficeOpenXml && !isUtf8Text) return 'The file contents do not match the selected document type.'
   return ''
 }
 
@@ -192,11 +232,67 @@ const bodyValidators = {
     if (body.isVerified !== undefined && typeof body.isVerified !== 'boolean') errors.push('Verification status must be true or false.')
   },
   adminUserUpdate(body, errors) {
-    if (!checkObject(body, ['role', 'departmentId', 'isVerified'], errors)) return
-    if (!Object.keys(body).length) errors.push('Choose a role, department, or verification status to update.')
+    if (!checkObject(body, ['name', 'email', 'phone', 'dateOfBirth', 'role', 'departmentId', 'isVerified'], errors)) return
+    if (!Object.keys(body).length) errors.push('Choose at least one user detail to update.')
+    if (body.name !== undefined) checkString(body, 'name', 'Name', errors, { min: 2, max: 80 })
+    if (body.email !== undefined) checkEmail(body, errors)
+    if (body.phone !== undefined) {
+      const phone = checkString(body, 'phone', 'Phone number', errors, { required: false, max: 25 })
+      if (phone && !/^\+?\d{8,15}$/.test(phone.replace(/[\s().-]/g, ''))) errors.push('Enter a valid phone number with 8 to 15 digits.')
+    }
+    if (body.dateOfBirth !== undefined && body.dateOfBirth !== '' && (!isDateKey(body.dateOfBirth) || body.dateOfBirth > new Date().toISOString().slice(0, 10))) errors.push('Enter a valid date of birth that is not in the future.')
     if (body.role !== undefined && (typeof body.role !== 'string' || !body.role.trim() || body.role.length > 60)) errors.push('Choose a valid role.')
     if (body.departmentId !== undefined && body.departmentId !== null && body.departmentId !== '' && (typeof body.departmentId !== 'string' || !OBJECT_ID_PATTERN.test(body.departmentId))) errors.push('Choose a valid department.')
     if (body.isVerified !== undefined && typeof body.isVerified !== 'boolean') errors.push('Verification status must be true or false.')
+  },
+  impersonation(body, errors) {
+    if (!checkObject(body, ['reason'], errors)) return
+    checkString(body, 'reason', 'Impersonation reason', errors, { min: 10, max: 500 })
+  },
+  crmCustomer(body, errors) {
+    if (!checkObject(body, ['name', 'company', 'email', 'phone', 'address', 'status', 'source', 'notes'], errors)) return
+    checkString(body, 'name', 'Customer name', errors, { min: 2, max: 100 })
+    checkString(body, 'company', 'Company', errors, { required: false, max: 120 })
+    const email = checkString(body, 'email', 'Email', errors, { required: false, max: 254 })
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push('Enter a valid email address.')
+    checkString(body, 'phone', 'Phone', errors, { required: false, max: 30 })
+    checkString(body, 'address', 'Address', errors, { required: false, max: 500 })
+    checkString(body, 'status', 'Status', errors, { required: false, max: 20 })
+    checkString(body, 'source', 'Source', errors, { required: false, max: 80 })
+    checkString(body, 'notes', 'Notes', errors, { required: false, max: 2000 })
+    if (!(typeof body.email === 'string' && body.email.trim()) && !(typeof body.phone === 'string' && body.phone.trim())) errors.push('Add an email address or phone number.')
+    if (body.status !== undefined && body.status !== '' && !['lead', 'prospect', 'customer', 'inactive'].includes(body.status)) errors.push('Choose a valid customer status.')
+  },
+  inventoryItem(body, errors) {
+    if (!checkObject(body, ['name', 'category', 'sku', 'quantity', 'reorderLevel', 'unit', 'location', 'supplier', 'description'], errors)) return
+    checkString(body, 'name', 'Item name', errors, { min: 2, max: 120 })
+    checkString(body, 'category', 'Category', errors, { min: 2, max: 80 })
+    checkString(body, 'sku', 'SKU', errors, { required: false, max: 40 })
+    checkString(body, 'unit', 'Unit', errors, { min: 1, max: 30 })
+    checkString(body, 'location', 'Location', errors, { required: false, max: 120 })
+    checkString(body, 'supplier', 'Supplier', errors, { required: false, max: 120 })
+    checkString(body, 'description', 'Description', errors, { required: false, max: 1000 })
+    for (const field of ['quantity', 'reorderLevel']) {
+      if (!Number.isInteger(body[field]) || body[field] < 0 || body[field] > 1000000) errors.push(`${field === 'quantity' ? 'Quantity' : 'Reorder level'} must be a whole number from 0 to 1,000,000.`)
+    }
+  },
+  revenueTransaction(body, errors) {
+    if (!checkObject(body, ['transactionType', 'category', 'amount', 'transactionDate', 'status', 'paymentMethod', 'counterparty', 'reference', 'description'], errors)) return
+    if (!['income', 'expense', 'refund', 'transfer'].includes(body.transactionType)) errors.push('Choose income, expense, refund, or transfer as the transaction type.')
+    checkString(body, 'category', 'Category', errors, { min: 2, max: 60 })
+    if (typeof body.amount !== 'number' || !Number.isFinite(body.amount) || body.amount < 0.01 || body.amount > 1000000000000 || Math.round(body.amount * 100) !== body.amount * 100) errors.push('Amount must be a positive amount in INR with no more than two decimal places.')
+    const transactionDate = checkString(body, 'transactionDate', 'Transaction date', errors, { max: 10 })
+    if (transactionDate && !isDateKey(transactionDate)) errors.push('Enter a valid transaction date.')
+    if (!['cleared', 'pending', 'voided'].includes(body.status)) errors.push('Choose cleared, pending, or voided as the transaction status.')
+    if (!['bank-transfer', 'upi', 'card', 'cash', 'cheque', 'other'].includes(body.paymentMethod)) errors.push('Choose a supported payment method.')
+    checkString(body, 'counterparty', 'Customer or vendor', errors, { required: false, max: 120 })
+    checkString(body, 'reference', 'Reference', errors, { required: false, max: 100 })
+    checkString(body, 'description', 'Description', errors, { required: false, max: 1000 })
+  },
+  crmCustomerImport(body, errors) {
+    if (!checkObject(body, ['customers'], errors)) return
+    if (!Array.isArray(body.customers) || body.customers.length < 1 || body.customers.length > 100) errors.push('Import between 1 and 100 customers at a time.')
+    else if (body.customers.some((row) => !isObject(row))) errors.push('Every spreadsheet row must contain an object of customer details.')
   },
   userImport(body, errors) {
     if (!checkObject(body, ['users'], errors)) return
@@ -312,6 +408,17 @@ const bodyValidators = {
     if (!checkObject(body, ['decision', 'message'], errors)) return
     if (!['reviewed', 'approve-correction', 'reject-correction'].includes(body.decision)) errors.push('Choose a valid location review action.')
     checkString(body, 'message', 'Review note', errors, { min: 3, max: 1000 })
+  },
+  calendarEvent(body, errors) {
+    if (!checkObject(body, ['title', 'description', 'type', 'startAt', 'endAt', 'allDay', 'location', 'reminderMinutes'], errors)) return
+    checkString(body, 'title', 'Event title', errors, { min: 2, max: 120 })
+    checkString(body, 'description', 'Event description', errors, { required: false, max: 2000 })
+    checkString(body, 'location', 'Location', errors, { required: false, max: 200 })
+    if (!['holiday', 'event', 'meeting'].includes(body.type)) errors.push('Choose a valid calendar event type.')
+    const validTimestamp = (value) => typeof value === 'string' && !Number.isNaN(Date.parse(value)) && new Date(value).toISOString() === value
+    if (!validTimestamp(body.startAt) || !validTimestamp(body.endAt) || body.endAt <= body.startAt) errors.push('Enter a valid calendar date and time range.')
+    if (typeof body.allDay !== 'boolean') errors.push('Choose whether this is an all-day event.')
+    if (!Number.isInteger(body.reminderMinutes) || ![0, 5, 15, 30, 60, 1440].includes(body.reminderMinutes)) errors.push('Choose a valid reminder time.')
   },
 }
 
