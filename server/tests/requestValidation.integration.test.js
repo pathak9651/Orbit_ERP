@@ -186,6 +186,23 @@ test('office calendar reads and event changes require an authenticated session',
   assert.equal(updateResponse.status, 401)
 })
 
+test('leave coverage assignee lookup and task assignment require an authenticated session', async () => {
+  const trustedOrigin = process.env.CLIENT_ORIGIN?.split(',')[0] || 'http://localhost:5173'
+  const [lookupResponse, assignmentResponse] = await Promise.all([
+    fetch(`${baseUrl}/api/tasks/assignees?coverageDate=2026-11-10`),
+    fetch(`${baseUrl}/api/tasks`, {
+      method: 'POST',
+      headers: { Origin: trustedOrigin, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Prepare payroll', assignedTo: '64b000000000000000000001', dueDate: '2026-11-10',
+        coveringEmployeeId: '64b000000000000000000002', coverageLeaveId: '64b000000000000000000003',
+      }),
+    }),
+  ])
+  assert.equal(lookupResponse.status, 401)
+  assert.equal(assignmentResponse.status, 401)
+})
+
 test('company overview is available only to an authenticated administrator', async () => {
   const response = await fetch(`${baseUrl}/api/admin/overview`)
   assert.equal(response.status, 401)

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { validateClientForm, validateDocumentFile, validateProfileImageFile, validateSpreadsheetFile } from './validation.js'
+import { getPasswordMismatchMessage, validateClientForm, validateDocumentFile, validateProfileImageFile, validateSpreadsheetFile } from './validation.js'
 import { getChatMessageStatus, shouldShowOffPageChatNotification } from './chat.js'
 
 test('client profile image checks allow supported images and reject unsafe or oversized files', () => {
@@ -68,10 +68,18 @@ test('calendar event validation accepts valid events and rejects invalid time ra
 test('client accepts valid signup fields and rejects weak or malformed values', () => {
   const signup = { name: 'Jordan Lee', phone: '+1 (555) 123-4567', email: 'jordan@example.com', dateOfBirth: '1995-06-12', password: 'correct horse', confirmPassword: 'correct horse' }
   assert.equal(validateClientForm('signup', signup), '')
+  const { confirmPassword, ...signupRequest } = signup
+  assert.equal(validateClientForm('signupRequest', signupRequest), '')
   assert.match(validateClientForm('signup', { ...signup, name: 'J' }), /Full name/)
   assert.match(validateClientForm('signup', { ...signup, phone: '123' }), /Phone number/)
   assert.match(validateClientForm('signup', { ...signup, dateOfBirth: '2999-01-01' }), /date of birth/)
-  assert.match(validateClientForm('signup', { ...signup, confirmPassword: 'different' }), /do not match/)
+  assert.match(validateClientForm('signup', { ...signup, confirmPassword: 'different' }), /Passwords differ at character/)
+})
+
+test('password mismatch feedback reports safe lengths and character position only', () => {
+  assert.equal(getPasswordMismatchMessage('SamePass1', 'SamePass1'), '')
+  assert.match(getPasswordMismatchMessage('SamePass1', 'SamePass1 '), /password: 9 characters, confirmation: 10/)
+  assert.match(getPasswordMismatchMessage('SamePass1', 'SameXass1'), /character 5/)
 })
 
 test('client rejects extra fields before sending sensitive profile changes', () => {
@@ -88,6 +96,13 @@ test('client profile form validates editable phone and date of birth fields', ()
 test('client checks date ordering and invoice line items', () => {
   assert.match(validateClientForm('leave', { leaveType: 'annual', startDate: '2026-12-02', endDate: '2026-12-01', reason: 'Trip' }), /date range/)
   assert.match(validateClientForm('invoice', { customerName: 'Customer', customerEmail: '', status: 'draft', dueDate: '2026-12-01', notes: '', items: [] }), /invoice items/)
+})
+
+test('client task validation requires a due date and both references for leave coverage', () => {
+  const task = { title: 'Prepare payroll', assignedTo: '64b000000000000000000001', dueDate: '2026-11-10', coveringEmployeeId: '64b000000000000000000002', coverageLeaveId: '64b000000000000000000003' }
+  assert.equal(validateClientForm('task', task), '')
+  assert.match(validateClientForm('task', { ...task, dueDate: '' }), /due date/i)
+  assert.match(validateClientForm('task', { ...task, coverageLeaveId: '' }), /both the employee/i)
 })
 
 test('client validates GPS accuracy and requires reasons for location corrections', () => {

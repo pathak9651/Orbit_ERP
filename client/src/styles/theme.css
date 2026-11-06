@@ -1589,6 +1589,18 @@ button:disabled {
 .overview-apply-button { align-self: end; min-height: 42px; }
 .overview-section { display: grid; gap: 13px; }
 .overview-section > .section-heading { align-items: flex-end; }
+.department-attendance-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 12px; }
+.department-attendance-card { display: grid; gap: 15px; min-width: 0; padding: 16px; }
+.department-attendance-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.department-attendance-title h3 { margin: 0; color: var(--color-text); font-size: 13px; overflow-wrap: anywhere; }
+.department-attendance-title span { flex: 0 0 auto; color: var(--color-text-subtle); font-size: 10px; }
+.department-attendance-counts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.department-attendance-count { display: grid; gap: 6px; min-width: 0; padding: 10px; border: 1px solid var(--color-border-soft); border-radius: 9px; background: var(--color-surface-raised); }
+.department-attendance-count span { color: var(--color-text-subtle); font-size: 9px; }
+.department-attendance-count strong { font-size: 20px; line-height: 1; }
+.department-attendance-count.is-present strong { color: #8edfff; }
+.department-attendance-count.is-absent strong { color: #ff969c; }
+.department-attendance-count.is-leave strong { color: #c3b5ff; }
 .overview-metric-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .overview-four-columns { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .overview-three-columns { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -2690,6 +2702,7 @@ button:disabled {
 .work-description { grid-column: 1 / -1; }
 .work-form .button { justify-self: start; }
 .work-muted { align-self: center; color: var(--color-text-subtle); font-size: 10px; }
+.work-coverage-note { grid-column: 1 / -1; margin: 0; padding: 10px 12px; border: 1px solid var(--color-border-soft); border-left: 3px solid var(--color-accent); border-radius: 8px; background: var(--color-surface-raised); color: var(--color-text-muted); font-size: 10px; line-height: 1.55; }
 .document-upload-form { display: grid; gap: 13px; max-width: 720px; }
 .document-upload-form .field-label input, .document-upload-form .field-label textarea { width: 100%; min-height: 40px; padding: 9px 11px; border: 1px solid var(--color-border-soft); border-radius: 9px; background: #101719; color: var(--color-text); font: inherit; font-size: 11px; }
 .document-upload-form .field-label textarea { resize: vertical; }

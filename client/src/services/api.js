@@ -4,7 +4,7 @@ import { validateClientForm } from './validation.js'
 function requestValidationSchema(path, method) {
   const route = path.split('?')[0]
   const exactRoutes = {
-    'POST /api/login': 'login', 'POST /api/signup': 'signup',
+    'POST /api/login': 'login', 'POST /api/signup': 'signupRequest',
     'POST /api/forgot-password': 'forgotPassword', 'POST /api/reset-password': 'resetPassword',
     'POST /api/calendar/events': 'calendarEvent',
     'PATCH /api/profile': 'profile', 'PATCH /api/profile/password': 'password',
@@ -551,8 +551,8 @@ export function getTasks(parameters) {
   return request(withQuery('/api/tasks', parameters))
 }
 
-export function getTaskAssignees() {
-  return request('/api/tasks/assignees')
+export function getTaskAssignees(parameters) {
+  return request(withQuery('/api/tasks/assignees', parameters))
 }
 
 export function createTask(details) {

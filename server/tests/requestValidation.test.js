@@ -80,6 +80,17 @@ test('chat requests validate messages and target identifiers', () => {
   assert.ok(validateRequestBody('chatMessage', { body: 'x'.repeat(4001) }).length)
 })
 
+test('task coverage requests require a valid employee, approved leave ID, and due date', () => {
+  const validCoverageTask = {
+    title: 'Prepare monthly payroll', assignedTo: '64b000000000000000000001', dueDate: '2026-11-10',
+    coveringEmployeeId: '64b000000000000000000002', coverageLeaveId: '64b000000000000000000003',
+  }
+  assert.deepEqual(validateRequestBody('task', validCoverageTask), [])
+  assert.ok(validateRequestBody('task', { ...validCoverageTask, coverageLeaveId: 'bad-id' }).some((message) => /approved leave request/i.test(message)))
+  assert.ok(validateRequestBody('task', { ...validCoverageTask, dueDate: '' }).some((message) => /due date/i.test(message)))
+  assert.ok(validateRequestBody('task', { ...validCoverageTask, coveringEmployeeId: undefined }).some((message) => /both the employee/i.test(message)))
+})
+
 test('profile validation accepts editable phone and birth date and rejects malformed values', () => {
   const validProfile = { name: 'Jordan Lee', email: 'jordan@example.com', phone: '+1 (555) 123-4567', dateOfBirth: '1995-06-12' }
   assert.deepEqual(validateRequestBody('profile', validProfile), [])

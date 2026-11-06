@@ -7,6 +7,7 @@ import LeaveRequest from '../models/leaveRequest.js'
 import Task from '../models/task.js'
 import User from '../models/user.js'
 import { calculateDistanceMeters, getAttendanceLocationPolicy } from '../services/attendanceLocation.js'
+import { getPaginationOptions } from '../utils/pagination.js'
 
 const DATE_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 const DEFAULT_LATE_AFTER = '09:30'
@@ -79,6 +80,60 @@ function isLateCheckIn(checkIn, timeZone, lateAfter) {
   return `${values.hour}:${values.minute}` > lateAfter
 }
 
+/** Builds department totals for present, absent, and approved-leave employees on one date. */
+export function buildDepartmentAttendanceSnapshot({ people, departments, attendanceRecords, approvedLeaves, dateKey, paginationOptions }) {
+  const departmentNames = new Map(departments.map((department) => [String(department._id), department.name]))
+  const attendanceByUser = new Set(attendanceRecords
+    .filter((record) => record.dateKey === dateKey)
+    .map((record) => String(record.user)))
+  const usersOnApprovedLeave = new Set(approvedLeaves
+    .filter((leave) => leave.startDate <= dateKey && leave.endDate >= dateKey)
+    .map((leave) => String(leave.requester)))
+  const departmentTotals = new Map()
+
+  for (const department of departments) {
+    departmentTotals.set(String(department._id), {
+      id: String(department._id), name: department.name, employees: 0, present: 0, absent: 0, onLeave: 0,
+    })
+  }
+
+  for (const person of people) {
+    if (person.role === 'admin' || person.isVerified === false) continue
+    const departmentId = person.department ? String(person.department) : 'unassigned'
+    if (!departmentTotals.has(departmentId)) {
+      departmentTotals.set(departmentId, {
+        id: departmentId, name: departmentNames.get(departmentId) || 'Unassigned',
+        employees: 0, present: 0, absent: 0, onLeave: 0,
+      })
+    }
+
+    const totals = departmentTotals.get(departmentId)
+    totals.employees += 1
+    const userId = String(person._id)
+    if (attendanceByUser.has(userId)) totals.present += 1
+    else if (usersOnApprovedLeave.has(userId)) totals.onLeave += 1
+    else totals.absent += 1
+  }
+
+  const allDepartments = [...departmentTotals.values()].sort((first, second) => first.name.localeCompare(second.name))
+  const totalItems = allDepartments.length
+  const totalPages = Math.ceil(totalItems / paginationOptions.pageSize)
+  const page = totalPages ? Math.min(paginationOptions.page, totalPages) : 1
+
+  return {
+    date: dateKey,
+    departments: allDepartments.slice((page - 1) * paginationOptions.pageSize, page * paginationOptions.pageSize),
+    pagination: {
+      page,
+      pageSize: paginationOptions.pageSize,
+      totalItems,
+      totalPages,
+      hasNextPage: page < totalPages,
+      hasPreviousPage: page > 1,
+    },
+  }
+}
+
 /** Returns real company metrics for administrators, scoped by department and reporting period. */
 export async function getAdminOverview(req, res, next) {
   const timeZone = process.env.APP_TIME_ZONE || 'Asia/Kolkata'
@@ -110,6 +165,7 @@ export async function getAdminOverview(req, res, next) {
   }
 
   try {
+    const paginationOptions = getPaginationOptions(req.query)
     const department = departmentId === 'all' ? null : await Department.findById(departmentId).select('_id name').lean()
     if (departmentId !== 'all' && !department) return res.status(400).json({ message: 'The selected department no longer exists.' })
 
@@ -233,6 +289,14 @@ export async function getAdminOverview(req, res, next) {
         actor: event.actor?.name || 'System',
         createdAt: event.createdAt,
       })),
+      departmentAttendance: buildDepartmentAttendanceSnapshot({
+        people,
+        departments: department ? [department] : departments,
+        attendanceRecords,
+        approvedLeaves,
+        dateKey: endDate,
+        paginationOptions,
+      }),
     })
   } catch (error) { return next(error) }
 }

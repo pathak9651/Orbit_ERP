@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import Footer from '../layout/Footer.jsx'
 import LoadingState from '../common/LoadingState.jsx'
+import Pagination from '../common/Pagination.jsx'
 import { getAdminOverview } from '../../services/api.js'
 
 /** Provides date strings for the browser's local calendar without a UTC date shift. */
@@ -38,6 +39,7 @@ export default function AdminOverviewPage({ user, onNavigate }) {
   const [filters, setFilters] = useState({ startDate: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`, endDate: localDateKey(today), departmentId: 'all', location: 'all' })
   const [appliedFilters, setAppliedFilters] = useState(filters)
   const [overview, setOverview] = useState(null)
+  const [departmentAttendancePage, setDepartmentAttendancePage] = useState(1)
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(true)
 
@@ -45,16 +47,17 @@ export default function AdminOverviewPage({ user, onNavigate }) {
     let isCurrentRequest = true
     setIsLoading(true)
     setError('')
-    getAdminOverview(appliedFilters)
+    getAdminOverview({ ...appliedFilters, page: departmentAttendancePage })
       .then((result) => { if (isCurrentRequest) setOverview(result) })
       .catch((requestError) => { if (isCurrentRequest) setError(requestError.message || 'Could not load company overview.') })
       .finally(() => { if (isCurrentRequest) setIsLoading(false) })
     return () => { isCurrentRequest = false }
-  }, [appliedFilters])
+  }, [appliedFilters, departmentAttendancePage])
 
   function updateFilter(event) {
     const { name, value } = event.target
     setFilters((current) => ({ ...current, [name]: value }))
+    if (name === 'departmentId') setDepartmentAttendancePage(1)
   }
 
   const alerts = overview ? [
@@ -106,6 +109,23 @@ export default function AdminOverviewPage({ user, onNavigate }) {
               <OverviewMetric label="Approved leave workdays" value={overview.attendance.onLeaveDays} note="Approved leave overlapping period" tone="blue" />
             </div>
             <p className="overview-context-note">Attendance location filter matches {overview.attendance.locationMatchedCheckIns} check-in record{overview.attendance.locationMatchedCheckIns === 1 ? '' : 's'}. GPS/geofence filters do not change absence totals.</p>
+          </section>
+
+          <section className="overview-section" aria-labelledby="department-attendance-heading">
+            <div className="section-heading"><div><h2 id="department-attendance-heading">Department attendance</h2><p>Active employees by attendance status on {overview.departmentAttendance.date}. Approved leave is shown separately from absence.</p></div></div>
+            {overview.departmentAttendance.departments.length ? <>
+              <div className="department-attendance-grid">
+                {overview.departmentAttendance.departments.map((department) => <article className="panel-card department-attendance-card" key={department.id}>
+                  <div className="department-attendance-title"><h3>{department.name}</h3><span>{department.employees} employee{department.employees === 1 ? '' : 's'}</span></div>
+                  <div className="department-attendance-counts">
+                    <div className="department-attendance-count is-present"><span>Present</span><strong>{department.present}</strong></div>
+                    <div className="department-attendance-count is-absent"><span>Absent</span><strong>{department.absent}</strong></div>
+                    <div className="department-attendance-count is-leave"><span>On leave</span><strong>{department.onLeave}</strong></div>
+                  </div>
+                </article>)}
+              </div>
+              <Pagination pagination={overview.departmentAttendance.pagination} onPageChange={setDepartmentAttendancePage} disabled={isLoading} />
+            </> : <p className="overview-empty-note">No active employees are assigned to this department.</p>}
           </section>
 
           <section className="overview-section" aria-labelledby="tasks-heading">

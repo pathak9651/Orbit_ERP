@@ -110,6 +110,17 @@ function passwordError(value, label, { required = true, min = 0 } = {}) {
   return ''
 }
 
+/** Explains where two passwords differ without ever revealing either password value. */
+export function getPasswordMismatchMessage(password, confirmation) {
+  if (password === confirmation) return ''
+  const passwordCharacters = Array.from(typeof password === 'string' ? password : '')
+  const confirmationCharacters = Array.from(typeof confirmation === 'string' ? confirmation : '')
+  const sharedLength = Math.min(passwordCharacters.length, confirmationCharacters.length)
+  const differingIndex = passwordCharacters.findIndex((character, index) => index < sharedLength && character !== confirmationCharacters[index])
+  const position = differingIndex >= 0 ? differingIndex + 1 : sharedLength + 1
+  return `Passwords differ at character ${position} (password: ${passwordCharacters.length} characters, confirmation: ${confirmationCharacters.length}). Check for an extra space or capitalization difference.`
+}
+
 function makeSchema(allowedFields, validateFields, { requireObject = true } = {}) {
   return (value) => {
     if (requireObject && !isPlainObject(value)) return 'Send a JSON object with the requested form fields.'
@@ -123,6 +134,18 @@ function makeSchema(allowedFields, validateFields, { requireObject = true } = {}
   }
 }
 
+const signupRequestValidators = [
+  (value) => textError(value.name, 'Full name', { min: 2, max: 80 }),
+  (value) => {
+    const error = textError(value.phone, 'Phone number', { min: 8, max: 25 })
+    if (error) return error
+    return /^\+?\d{8,15}$/.test(value.phone.trim().replace(/[\s().-]/g, '')) ? '' : 'Enter a valid phone number with 8 to 15 digits.'
+  },
+  (value) => emailError(value.email),
+  (value) => validDate(value.dateOfBirth) && value.dateOfBirth <= new Date().toISOString().slice(0, 10) ? '' : 'Enter a valid date of birth that is not in the future.',
+  (value) => passwordError(value.password, 'Password', { min: 8 }),
+]
+
 const schemas = {
   login: makeSchema(['email', 'password'], [
     (value) => emailError(value.email), (value) => passwordError(value.password, 'Password'),
@@ -130,17 +153,10 @@ const schemas = {
   forgotPassword: makeSchema(['email'], [(value) => emailError(value.email)]),
   resetPassword: makeSchema(['token', 'newPassword'], [(value) => textError(value.token, 'Reset token', { max: 200 }), (value) => passwordError(value.newPassword, 'New password', { min: 8 })]),
   signup: makeSchema(['name', 'phone', 'email', 'dateOfBirth', 'password', 'confirmPassword'], [
-    (value) => textError(value.name, 'Full name', { min: 2, max: 80 }),
-    (value) => {
-      const error = textError(value.phone, 'Phone number', { min: 8, max: 25 })
-      if (error) return error
-      return /^\+?\d{8,15}$/.test(value.phone.trim().replace(/[\s().-]/g, '')) ? '' : 'Enter a valid phone number with 8 to 15 digits.'
-    },
-    (value) => emailError(value.email),
-    (value) => validDate(value.dateOfBirth) && value.dateOfBirth <= new Date().toISOString().slice(0, 10) ? '' : 'Enter a valid date of birth that is not in the future.',
-    (value) => passwordError(value.password, 'Password', { min: 8 }),
-    (value) => value.confirmPassword === value.password ? '' : 'The passwords do not match.',
+    ...signupRequestValidators,
+    (value) => getPasswordMismatchMessage(value.password, value.confirmPassword),
   ]),
+  signupRequest: makeSchema(['name', 'phone', 'email', 'dateOfBirth', 'password'], signupRequestValidators),
   profile: makeSchema(['name', 'email', 'phone', 'dateOfBirth', 'currentPassword'], [
     (value) => textError(value.name, 'Name', { min: 2, max: 80 }),
     (value) => emailError(value.email),
@@ -178,11 +194,15 @@ const schemas = {
     (value) => value.isVerified === undefined || typeof value.isVerified === 'boolean' ? '' : 'Verification status must be true or false.',
   ]),
   impersonation: makeSchema(['reason'], [(value) => textError(value.reason, 'Impersonation reason', { min: 10, max: 500 })]),
-  task: makeSchema(['title', 'description', 'assignedTo', 'dueDate'], [
+  task: makeSchema(['title', 'description', 'assignedTo', 'dueDate', 'coveringEmployeeId', 'coverageLeaveId'], [
     (value) => textError(value.title, 'Task title', { min: 3, max: 120 }),
     (value) => value.description === undefined ? '' : textError(value.description, 'Task description', { required: false, max: 2000 }),
     (value) => typeof value.assignedTo === 'string' && OBJECT_ID_PATTERN.test(value.assignedTo) ? '' : 'Select a valid team member.',
     (value) => value.dueDate === undefined || value.dueDate === '' || validDate(value.dueDate) ? '' : 'Enter a valid due date.',
+    (value) => (Boolean(value.coveringEmployeeId) === Boolean(value.coverageLeaveId)) ? '' : 'Choose both the employee on leave and their approved leave request.',
+    (value) => !value.coveringEmployeeId || (typeof value.coveringEmployeeId === 'string' && OBJECT_ID_PATTERN.test(value.coveringEmployeeId)) ? '' : 'Choose a valid employee whose duties need coverage.',
+    (value) => !value.coverageLeaveId || (typeof value.coverageLeaveId === 'string' && OBJECT_ID_PATTERN.test(value.coverageLeaveId)) ? '' : 'Choose a valid approved leave request.',
+    (value) => !value.coveringEmployeeId || Boolean(value.dueDate) ? '' : 'Choose a due date for a leave coverage assignment.',
   ]),
   taskStatus: makeSchema(['status'], [(value) => ['pending', 'in-progress', 'completed'].includes(value.status) ? '' : 'Choose a valid task status.']),
   leave: makeSchema(['leaveType', 'startDate', 'endDate', 'reason'], [

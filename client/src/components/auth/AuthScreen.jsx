@@ -3,7 +3,7 @@ import PasswordInput from '../shared/PasswordInput.jsx'
 import orbitLogo from '../../assets/orbit-logo.svg'
 
 /** Presents the shared sign-in and account-request form. */
-export default function AuthScreen({ mode, onModeChange, onSubmit, error, notice, busy, resetToken, loginCooldownUntil = 0 }) {
+export default function AuthScreen({ mode, onModeChange, onInputChange, onSubmit, error, notice, busy, resetToken, loginCooldownUntil = 0 }) {
   const [currentTime, setCurrentTime] = useState(Date.now())
   const isSignUp = mode === 'signup'
   const isForgot = mode === 'forgot'
@@ -46,7 +46,7 @@ export default function AuthScreen({ mode, onModeChange, onSubmit, error, notice
             {isSignUp ? 'Set up your workspace and bring your business into focus.' : isForgot ? 'Enter your account email to receive reset instructions.' : isReset ? 'Choose a unique password with at least 8 characters.' : 'Enter your details to access your workspace.'}
           </p>
 
-          <form className="auth-form" onSubmit={onSubmit}>
+          <form className="auth-form" onSubmit={onSubmit} onChange={onInputChange}>
             {isSignUp && <>
               <label className="field-label">Full name<input name="name" autoComplete="name" placeholder="Alex Morgan" minLength="2" maxLength="80" required /></label>
               <label className="field-label">Phone No.<input name="phone" type="tel" autoComplete="tel" inputMode="tel" placeholder="+1 555 123 4567" minLength="8" maxLength="25" required /></label>

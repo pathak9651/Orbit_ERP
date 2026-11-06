@@ -57,7 +57,7 @@ const bodySpecifications = {
   revenueTransaction: { transactionType: { type: 'string', required: true }, category: { type: 'string', required: true }, amount: { type: 'number', required: true }, transactionDate: { type: 'string', required: true }, status: { type: 'string', required: true }, paymentMethod: { type: 'string', required: true }, counterparty: 'string', reference: 'string', description: 'string' },
   userImport: { users: { type: 'array', required: true } },
   googleSheet: { sheetUrl: { type: 'string', required: true } },
-  task: { title: { type: 'string', required: true }, description: 'string', assignedTo: { type: 'objectId', required: true }, dueDate: 'string' },
+  task: { title: { type: 'string', required: true }, description: 'string', assignedTo: { type: 'objectId', required: true }, dueDate: 'string', coveringEmployeeId: 'objectId', coverageLeaveId: 'objectId' },
   taskStatus: { status: { type: 'string', required: true, enum: ['pending', 'in-progress', 'completed'] } },
   leave: { leaveType: { type: 'string', required: true }, startDate: { type: 'string', required: true }, endDate: { type: 'string', required: true }, reason: { type: 'string', required: true } },
   leaveAction: { action: { type: 'string', required: true, enum: ['forward', 'approve', 'reject'] }, message: 'string' },
@@ -118,7 +118,7 @@ router.patch('/profile/password', authenticateToken, rejectImpersonatedSecurityC
 router.post('/logout', signOut);
 router.post('/impersonation/stop', authenticateToken, authenticatedApiRateLimiter, stopUserImpersonation);
 router.get('/admin', authenticateToken, authenticatedApiRateLimiter, authorizePermission('admin.manage'), getAdminDashboard);
-router.get('/admin/overview', authenticateToken, validate({ startDate: 'string', endDate: 'string', departmentId: 'string', location: 'string' }, { source: 'query' }), authenticatedApiRateLimiter, authorizePermission('admin.manage'), getAdminOverview);
+router.get('/admin/overview', authenticateToken, validate({ ...pageQuery, startDate: 'string', endDate: 'string', departmentId: 'string', location: 'string' }, { source: 'query' }), authenticatedApiRateLimiter, authorizePermission('admin.manage'), getAdminOverview);
 router.get('/admin/reports', authenticateToken, validate({ period: 'string', asOfDate: 'string' }, { source: 'query' }), authenticatedApiRateLimiter, authorizePermission('admin.manage'), getAdminReports);
 router.get('/admin/export.csv', authenticateToken, authenticatedApiRateLimiter, authorizePermission('admin.manage'), exportRateLimiter, exportAllDataCsv);
 router.get('/admin/audit-events', authenticateToken, validatePageQuery, authenticatedApiRateLimiter, authorizePermission('admin.manage'), listAuditEvents);
@@ -137,7 +137,7 @@ router.get('/admin/revenue/export.csv', authenticateToken, validate({ period: 's
 router.post('/admin/revenue/transactions', authenticateToken, validateRouteBody('revenueTransaction'), authenticatedApiRateLimiter, authorizePermission('admin.manage'), createRevenueTransaction);
 router.patch('/admin/revenue/transactions/:id', authenticateToken, validateIdParam, validateRouteBody('revenueTransaction'), authenticatedApiRateLimiter, authorizePermission('admin.manage'), updateRevenueTransaction);
 router.delete('/admin/revenue/transactions/:id', authenticateToken, validateIdParam, authenticatedApiRateLimiter, authorizePermission('admin.manage'), deleteRevenueTransaction);
-router.get('/tasks/assignees', authenticateToken, authenticatedApiRateLimiter, authorizePermission('tasks.assign'), getTaskAssignees);
+router.get('/tasks/assignees', authenticateToken, validate({ ...pageQuery, coverageDate: 'string' }, { source: 'query' }), authenticatedApiRateLimiter, authorizePermission('tasks.assign'), getTaskAssignees);
 router.get('/tasks', authenticateToken, validatePageQuery, authenticatedApiRateLimiter, listTasks);
 router.post('/tasks', authenticateToken, validateRouteBody('task'), authenticatedApiRateLimiter, authorizePermission('tasks.assign'), createTask);
 router.patch('/tasks/:id/status', authenticateToken, validate({ id: 'objectId' }, { source: 'params' }), validateRouteBody('taskStatus'), authenticatedApiRateLimiter, updateTaskStatus);

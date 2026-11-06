@@ -26,6 +26,7 @@ import Navbar from './components/layout/Navbar.jsx'
 import HorizontalNavbar from './components/layout/HorizontalNavbar.jsx'
 import { canAccessBilling } from './services/permissions.js'
 import { shouldShowOffPageChatNotification } from './services/chat.js'
+import { getPasswordMismatchMessage } from './services/validation.js'
 import { getCurrentUser, getNotifications, markAllNotificationsRead, markNotificationRead, requestPasswordReset, resetPassword, signIn, signOut, signUp, stopUserImpersonation } from './services/api.js'
 
 const WORKSPACE_PAGES = new Set(['overview', 'about', 'users', 'customers', 'tasks', 'attendance', 'leaves', 'email', 'documents', 'calendar', 'chat', 'inventory', 'billing', 'revenue', 'reports', 'audit', 'organization', 'profile'])
@@ -216,7 +217,8 @@ export default function App() {
         setCurrentPage('overview')
         setUser(result.user)
       } else if (authMode === 'signup') {
-        if (details.password !== details.confirmPassword) throw new Error('The passwords do not match.')
+        const passwordMismatch = getPasswordMismatchMessage(details.password, details.confirmPassword)
+        if (passwordMismatch) throw new Error(passwordMismatch)
         const { confirmPassword, ...signupDetails } = details
         const result = await signUp(signupDetails)
         setAuthMode('login')
@@ -318,6 +320,7 @@ export default function App() {
       <AuthScreen
         mode={authMode}
         onModeChange={(nextMode) => { setAuthMode(nextMode); setAuthError(''); setAuthNotice('') }}
+        onInputChange={() => { if (authError) setAuthError('') }}
         onSubmit={handleAuthSubmit}
         error={authError}
         notice={authNotice}

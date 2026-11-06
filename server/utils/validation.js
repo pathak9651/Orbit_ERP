@@ -308,11 +308,15 @@ const bodyValidators = {
     } catch { errors.push('Enter a valid Google Sheets link.') }
   },
   task(body, errors) {
-    if (!checkObject(body, ['title', 'description', 'assignedTo', 'dueDate'], errors)) return
+    if (!checkObject(body, ['title', 'description', 'assignedTo', 'dueDate', 'coveringEmployeeId', 'coverageLeaveId'], errors)) return
     checkString(body, 'title', 'Task title', errors, { min: 3, max: 120 })
     checkString(body, 'description', 'Task description', errors, { required: false, max: 2000 })
     if (typeof body.assignedTo !== 'string' || !OBJECT_ID_PATTERN.test(body.assignedTo)) errors.push('Select a valid team member.')
     if (body.dueDate !== undefined && body.dueDate !== '' && !isDateKey(body.dueDate)) errors.push('Enter a valid due date.')
+    if (body.coveringEmployeeId !== undefined && (typeof body.coveringEmployeeId !== 'string' || !OBJECT_ID_PATTERN.test(body.coveringEmployeeId))) errors.push('Choose a valid employee whose duties need coverage.')
+    if (body.coverageLeaveId !== undefined && (typeof body.coverageLeaveId !== 'string' || !OBJECT_ID_PATTERN.test(body.coverageLeaveId))) errors.push('Choose a valid approved leave request.')
+    if (Boolean(body.coveringEmployeeId) !== Boolean(body.coverageLeaveId)) errors.push('Choose both the employee on leave and their approved leave request.')
+    if (body.coveringEmployeeId && !body.dueDate) errors.push('Choose a due date for a leave coverage assignment.')
   },
   taskStatus(body, errors) {
     if (!checkObject(body, ['status'], errors)) return
